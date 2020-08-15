@@ -5,8 +5,7 @@ import struct
 from collections import namedtuple
 import wx
 import wx.adv
-import wx.lib.mixins.inspection
-import ctypes
+# import wx.lib.mixins.inspection
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
@@ -53,6 +52,7 @@ ARCIN_CONFIG_FLAG_INVERT_QE1        = (1 << 1)
 ARCIN_CONFIG_FLAG_SWAP_8_9          = (1 << 2)
 ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE = (1 << 3)
 ARCIN_CONFIG_FLAG_DEBOUNCE          = (1 << 4)
+ARCIN_CONFIG_FLAG_250HZ_READ_ONLY   = (1 << 5)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -206,6 +206,13 @@ class MainWindowFrame(wx.Frame):
         self.title_ctrl.SetMaxLength(11)
         grid.Add(title_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.title_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        fw_label = wx.StaticText(panel, label="Firmware")
+        self.fw_ctrl = wx.TextCtrl(panel, style=wx.TE_READONLY)
+        self.fw_ctrl.Disable()
+        grid.Add(fw_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.fw_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         checklist_label = wx.StaticText(panel, label="Options")
@@ -394,6 +401,11 @@ class MainWindowFrame(wx.Frame):
 
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
+
+        if conf.flags & ARCIN_CONFIG_FLAG_250HZ_READ_ONLY:
+            self.fw_ctrl.SetValue("Poll rate = 250hz")
+        else:
+            self.fw_ctrl.SetValue("Poll rate = 1000hz")
 
         index = -4 # 1:4 is a reasonable default
         for i, value in enumerate(SENS_OPTIONS.values()):
