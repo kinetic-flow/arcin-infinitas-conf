@@ -5,6 +5,7 @@ import struct
 from collections import namedtuple
 import wx
 import wx.adv
+from os import system
 # import wx.lib.mixins.inspection
 
 ArcinConfig = namedtuple(
@@ -181,6 +182,8 @@ class MainWindowFrame(wx.Frame):
             wx.EVT_LIST_ITEM_SELECTED, self.on_device_list_select)
         self.devices_list.Bind(
             wx.EVT_LIST_ITEM_DESELECTED, self.on_device_list_deselect)
+
+        self.devices_list.SetMaxSize((-1, 100))
         box.Add(self.devices_list, flag=(wx.EXPAND | wx.ALL), border=4)
 
         button_box = wx.BoxSizer(wx.HORIZONTAL)
@@ -247,14 +250,21 @@ class MainWindowFrame(wx.Frame):
         self.__populate_device_list__()
 
     def makeMenuBar(self):
-        help_menu = wx.Menu()
-        about_item = help_menu.Append(wx.ID_ABOUT)
+        options_menu = wx.Menu()
+
+        winjoy_item = options_menu.Append(
+            wx.ID_ANY, item="Game Controllers control panel")
+
+        options_menu.AppendSeparator()
+        
+        about_item = options_menu.Append(wx.ID_ABOUT)
 
         menu_bar = wx.MenuBar()
-        menu_bar.Append(help_menu, "&Help")
+        menu_bar.Append(options_menu, "&Tools")
 
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, self.OnAbout, about_item)
+        self.Bind(wx.EVT_MENU, self.OnWinJoy, winjoy_item)
 
     def OnAbout(self, event):
         info = wx.adv.AboutDialogInfo()
@@ -263,6 +273,9 @@ class MainWindowFrame(wx.Frame):
         info.SetWebSite('https://github.com/minsang-github/arcin-infinitas')
 
         wx.adv.AboutBox(info)
+
+    def OnWinJoy(self, event):
+        system("joy.cpl")
 
     def __create_checklist__(self, parent):
         box_kw = {
