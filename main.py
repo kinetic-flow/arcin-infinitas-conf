@@ -10,7 +10,7 @@ from os import system
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
-    "label flags qe1_sens qe2_sens effector_mode ws2812b_mode")
+    "label flags qe1_sens qe2_sens effector_mode debounce_ticks")
 
 # Infinitas controller VID/PID = 0x1ccf / 0x8048
 VID = 0x1ccf
@@ -21,7 +21,7 @@ STRUCT_FMT = ("12s" + # uint8 label[12]
               "b" +   # int8 qe1_sens
               "b" +   # int8 qe2_sens
               "B" +   # uint8 effector_mode
-              "B")    # uint8 ws2812b_mode
+              "B")    # uint8 debounce_ticks
 
 SENS_OPTIONS = {
     "1:1": 0,
@@ -99,7 +99,7 @@ def save_to_device(device, conf):
             conf.qe1_sens,
             conf.qe2_sens,
             conf.effector_mode,
-            conf.ws2812b_mode)
+            conf.debounce_ticks)
     except:
         return (False, "Format error")
 
@@ -150,6 +150,8 @@ class MainWindowFrame(wx.Frame):
     swap89_check = None
     digital_tt_check = None
     debounce_check = None
+
+    debounce_ctrl = None
 
     qe1_sens_ctrl = None
     e1e2_ctrl = None
@@ -224,6 +226,15 @@ class MainWindowFrame(wx.Frame):
         grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
+        debounce_label = wx.StaticText(panel, label="Debounce frames")
+        self.debounce_ctrl = wx.SpinCtrl(
+            panel, min=2, max=255, initial=2)
+        self.debounce_ctrl.SetToolTip(
+            "On 1000hz, 4 frames (=4ms) is recommended. Not recommended for 250hz.")
+        grid.Add(debounce_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.debounce_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         qe1_sens_label = wx.StaticText(panel, label="QE1 sensitivity")
         self.qe1_sens_ctrl = wx.ComboBox(
             panel, choices=list(SENS_OPTIONS.keys()), style=wx.CB_READONLY)
@@ -247,6 +258,7 @@ class MainWindowFrame(wx.Frame):
         self.CreateStatusBar()
 
         self.__evaluate_save_load_buttons__()
+        self.__evaluate_debounce_options__()
         self.__populate_device_list__()
 
     def makeMenuBar(self):
@@ -286,14 +298,28 @@ class MainWindowFrame(wx.Frame):
 
         box = wx.BoxSizer(wx.VERTICAL)
         self.multitap_check = wx.CheckBox(parent, label="E2 multi-function")
+        self.multitap_check.SetToolTip(
+            "When enabled: press E2 once for E2, twice for E3, three times for E2+E3")
         box.Add(self.multitap_check, **box_kw)
+
         self.qe1_invert_check = wx.CheckBox(parent, label="Invert QE1")
+        self.qe1_invert_check.SetToolTip(
+            "Inverts the direction of the turntable.")
         box.Add(self.qe1_invert_check, **box_kw)
+
         self.swap89_check = wx.CheckBox(parent, label="Swap 8/9")
+        self.swap89_check.SetToolTip("Swaps buttons 8 and 9 (E3 and E4).")
         box.Add(self.swap89_check, **box_kw)
+
         self.digital_tt_check = wx.CheckBox(parent, label="LR2 digital TT")
         box.Add(self.digital_tt_check, **box_kw)
-        self.debounce_check = wx.CheckBox(parent, label="Debounce (5ms)")
+        self.digital_tt_check.SetToolTip(
+            "Make turntable movement register as button presses, and disables analog turntable.")
+
+        self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
+        self.debounce_check.SetToolTip(
+            "Enables debounce logic for buttons to compensate for switch chatter. Not recommended for 250hz.")
+        self.debounce_check.Bind(wx.EVT_CHECKBOX, self.on_debounce_check)
         box.Add(self.debounce_check, **box_kw)
         return box
 
@@ -307,6 +333,9 @@ class MainWindowFrame(wx.Frame):
     def __do_forced_selection__(self, index):
         if self.devices_list.GetSelectedItemCount() == 0:
             self.devices_list.Select(index)
+
+    def on_debounce_check(self, e):
+        self.__evaluate_debounce_options__()
 
     def on_refresh(self, e):
         self.__populate_device_list__()
@@ -335,9 +364,10 @@ class MainWindowFrame(wx.Frame):
 
 
     def on_load_deferred(self, device, conf):
+        self.__populate_from_conf__(conf)
         self.loading = False
         self.__evaluate_save_load_buttons__()
-        self.__populate_from_conf__(conf)
+        self.__evaluate_debounce_options__()
         self.SetStatusText(
             f"Loaded from {device.product_name} ({device.serial_number}).")
 
@@ -379,6 +409,11 @@ class MainWindowFrame(wx.Frame):
         if self.debounce_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
 
+        if 2 <= self.debounce_ctrl.GetValue() <= 255:
+            debounce_ticks = self.debounce_ctrl.GetValue()
+        else:
+            debounce_ticks = 2
+
         if self.qe1_sens_ctrl.GetValue() in SENS_OPTIONS:
             qe1_sens = SENS_OPTIONS[self.qe1_sens_ctrl.GetValue()]
         else:
@@ -391,13 +426,13 @@ class MainWindowFrame(wx.Frame):
             qe1_sens=qe1_sens,
             qe2_sens=0,
             effector_mode=effector_mode,
-            ws2812b_mode=0
+            debounce_ticks=debounce_ticks
         )
 
         return conf
 
     def __populate_from_conf__(self, conf):
-        # "label flags qe1_sens qe2_sens effector_mode ws2812b_mode")
+        # "label flags qe1_sens qe2_sens effector_mode debounce_ticks")
         self.title_ctrl.SetValue(conf.label)
 
         self.multitap_check.SetValue(
@@ -419,6 +454,8 @@ class MainWindowFrame(wx.Frame):
             self.fw_ctrl.SetValue("Poll rate = 250hz")
         else:
             self.fw_ctrl.SetValue("Poll rate = 1000hz")
+
+        self.debounce_ctrl.SetValue(conf.debounce_ticks)
 
         index = -4 # 1:4 is a reasonable default
         for i, value in enumerate(SENS_OPTIONS.values()):
@@ -444,6 +481,9 @@ class MainWindowFrame(wx.Frame):
             self.devices_list.Select(0)
 
         self.SetStatusText(f"Found {len(self.devices)} device(s).")
+
+    def __evaluate_debounce_options__(self):
+        self.debounce_ctrl.Enable(self.debounce_check.IsChecked())
 
     def __evaluate_save_load_buttons__(self):
         if self.devices_list.GetFirstSelected() >= 0 and not self.loading:
