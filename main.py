@@ -23,6 +23,12 @@ STRUCT_FMT = ("12s" + # uint8 label[12]
               "B" +   # uint8 effector_mode
               "B")    # uint8 debounce_ticks
 
+TT_OPTIONS = [
+    "Analog only (Infinitas)",
+    "Digital only (LR2)",
+    "Both analog and digital",
+]
+
 SENS_OPTIONS = {
     "1:1": 0,
     "1:2": -2,
@@ -48,12 +54,13 @@ E1E2_OPTIONS = [
     "E4, E3",
 ]
 
-ARCIN_CONFIG_FLAG_SEL_MULTI_TAP     = (1 << 0)
-ARCIN_CONFIG_FLAG_INVERT_QE1        = (1 << 1)
-ARCIN_CONFIG_FLAG_SWAP_8_9          = (1 << 2)
-ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE = (1 << 3)
-ARCIN_CONFIG_FLAG_DEBOUNCE          = (1 << 4)
-ARCIN_CONFIG_FLAG_250HZ_READ_ONLY   = (1 << 5)
+ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
+ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
+ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
+ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE      = (1 << 3)
+ARCIN_CONFIG_FLAG_DEBOUNCE               = (1 << 4)
+ARCIN_CONFIG_FLAG_250HZ_READ_ONLY        = (1 << 5)
+ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE = (1 << 6)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -148,16 +155,16 @@ class MainWindowFrame(wx.Frame):
     multitap_check = None
     qe1_invert_check = None
     swap89_check = None
-    digital_tt_check = None
     debounce_check = None
 
+    qe1_tt_ctrl = None
     debounce_ctrl = None
 
     qe1_sens_ctrl = None
     e1e2_ctrl = None
 
     def __init__(self, *args, **kw):
-        default_size = (320, 500)
+        default_size = (320, 520)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -235,6 +242,14 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.debounce_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
+        qe1_tt_label = wx.StaticText(panel, label="QE1 turntable")
+        self.qe1_tt_ctrl = wx.ComboBox(
+            panel, choices=TT_OPTIONS, style=wx.CB_READONLY)
+        self.qe1_tt_ctrl.Select(0)
+        grid.Add(qe1_tt_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.qe1_tt_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         qe1_sens_label = wx.StaticText(panel, label="QE1 sensitivity")
         self.qe1_sens_ctrl = wx.ComboBox(
             panel, choices=list(SENS_OPTIONS.keys()), style=wx.CB_READONLY)
@@ -310,11 +325,6 @@ class MainWindowFrame(wx.Frame):
         self.swap89_check = wx.CheckBox(parent, label="Swap 8/9")
         self.swap89_check.SetToolTip("Swaps buttons 8 and 9 (E3 and E4).")
         box.Add(self.swap89_check, **box_kw)
-
-        self.digital_tt_check = wx.CheckBox(parent, label="LR2 digital TT")
-        box.Add(self.digital_tt_check, **box_kw)
-        self.digital_tt_check.SetToolTip(
-            "Make turntable movement register as button presses, and disables analog turntable.")
 
         self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
         self.debounce_check.SetToolTip(
@@ -404,10 +414,14 @@ class MainWindowFrame(wx.Frame):
             flags |= ARCIN_CONFIG_FLAG_INVERT_QE1
         if self.swap89_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_SWAP_8_9
-        if self.digital_tt_check.IsChecked():
-            flags |= ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE
         if self.debounce_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
+
+        if self.qe1_tt_ctrl.GetSelection() == 1:
+            flags |= ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE
+        elif self.qe1_tt_ctrl.GetSelection() == 2:
+            flags |= ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE
+            flags |= ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE
 
         if 2 <= self.debounce_ctrl.GetValue() <= 255:
             debounce_ticks = self.debounce_ctrl.GetValue()
@@ -444,9 +458,6 @@ class MainWindowFrame(wx.Frame):
         self.swap89_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_SWAP_8_9))
 
-        self.digital_tt_check.SetValue(
-            bool(conf.flags & ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE))
-
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
 
@@ -454,6 +465,14 @@ class MainWindowFrame(wx.Frame):
             self.fw_ctrl.SetValue("Poll rate = 250hz")
         else:
             self.fw_ctrl.SetValue("Poll rate = 1000hz")
+
+        if (conf.flags & ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE and
+            conf.flags & ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE):
+            self.qe1_tt_ctrl.Select(2)
+        elif conf.flags & ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE:
+            self.qe1_tt_ctrl.Select(1)
+        else:
+            self.qe1_tt_ctrl.Select(0)
 
         self.debounce_ctrl.SetValue(conf.debounce_ticks)
 
