@@ -59,7 +59,7 @@ ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
 ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
 ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE      = (1 << 3)
 ARCIN_CONFIG_FLAG_DEBOUNCE               = (1 << 4)
-ARCIN_CONFIG_FLAG_250HZ_READ_ONLY        = (1 << 5)
+ARCIN_CONFIG_FLAG_250HZ_MODE             = (1 << 5)
 ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE = (1 << 6)
 
 def get_devices():
@@ -164,7 +164,7 @@ class MainWindowFrame(wx.Frame):
     e1e2_ctrl = None
 
     def __init__(self, *args, **kw):
-        default_size = (320, 520)
+        default_size = (320, 540)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -220,11 +220,10 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.title_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        fw_label = wx.StaticText(panel, label="Firmware")
-        self.fw_ctrl = wx.TextCtrl(panel, style=wx.TE_READONLY)
-        self.fw_ctrl.Disable()
+        fw_label = wx.StaticText(panel, label="Poll rate")
+        self.poll_rate_ctrl = wx.RadioBox(panel, choices=["1000hz", "250hz"])
         grid.Add(fw_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        grid.Add(self.fw_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        grid.Add(self.poll_rate_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         checklist_label = wx.StaticText(panel, label="Options")
@@ -417,6 +416,9 @@ class MainWindowFrame(wx.Frame):
         if self.debounce_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
 
+        if self.poll_rate_ctrl.GetSelection() == 1:
+            flags |= ARCIN_CONFIG_FLAG_250HZ_MODE
+
         if self.qe1_tt_ctrl.GetSelection() == 1:
             flags |= ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE
         elif self.qe1_tt_ctrl.GetSelection() == 2:
@@ -461,10 +463,10 @@ class MainWindowFrame(wx.Frame):
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
 
-        if conf.flags & ARCIN_CONFIG_FLAG_250HZ_READ_ONLY:
-            self.fw_ctrl.SetValue("Poll rate = 250hz")
+        if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
+            self.poll_rate_ctrl.Select(1)
         else:
-            self.fw_ctrl.SetValue("Poll rate = 1000hz")
+            self.poll_rate_ctrl.Select(0)
 
         if (conf.flags & ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE and
             conf.flags & ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE):
