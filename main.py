@@ -10,7 +10,7 @@ from usb_hid_keys import *
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
-    "label flags qe1_sens qe2_sens effector_mode debounce_ticks")
+    "label flags qe1_sens qe2_sens effector_mode debounce_ticks keycodes")
 
 ARCIN_CONFIG_VALID_KEYCODES = 13
 
@@ -18,12 +18,23 @@ ARCIN_CONFIG_VALID_KEYCODES = 13
 VID = 0x1ccf
 PID = 0x8048
 CONFIG_SEGMENT_ID = hid.get_full_usage_id(0xff55, 0xc0ff)
-STRUCT_FMT = ("12s" + # uint8 label[12]
-              "L" +   # uint32 flags
-              "b" +   # int8 qe1_sens
-              "b" +   # int8 qe2_sens
-              "B" +   # uint8 effector_mode
-              "B")    # uint8 debounce_ticks
+STRUCT_FMT_ORIGNAL = (
+    "12s" + # uint8 label[12]
+    "L" +   # uint32 flags
+    "b" +   # int8 qe1_sens
+    "b" +   # int8 qe2_sens
+    "B" +   # uint8 effector_mode
+    "B")    # uint8 debounce_ticks
+
+STRUCT_FMT_EX = (
+    "12s" + # uint8 label[12]
+    "L" +   # uint32 flags
+    "b" +   # int8 qe1_sens
+    "b" +   # int8 qe2_sens
+    "B" +   # uint8 effector_mode
+    "B" +   # uint8 debounce_ticks
+    "16s" + # char keycodes[16] (only 13 are used)
+    "24x")  # uint8 reserved[24]
 
 TT_OPTIONS = [
     "Analog only (Infinitas)",
@@ -99,21 +110,22 @@ def load_from_device(device):
 def parse_device(report):
     config_page = report[CONFIG_SEGMENT_ID]
     data = bytes(config_page.value)
-    expected_size = struct.calcsize(STRUCT_FMT)
+    expected_size = struct.calcsize(STRUCT_FMT_EX)
     truncated = bytes(data[0:expected_size])
-    unpacked = struct.unpack(STRUCT_FMT, truncated)
+    unpacked = struct.unpack(STRUCT_FMT_EX, truncated)
     return ArcinConfig._make(unpacked)
 
 def save_to_device(device, conf):
     try:
         packed = struct.pack(
-            STRUCT_FMT,
+            STRUCT_FMT_EX,
             conf.label[0:12].encode(),
             conf.flags,
             conf.qe1_sens,
             conf.qe2_sens,
             conf.effector_mode,
-            conf.debounce_ticks)
+            conf.debounce_ticks,
+            conf.keycodes)
     except:
         return (False, "Format error")
 
@@ -125,7 +137,7 @@ def save_to_device(device, conf):
 
         feature[0] = 0xc0 # report id
         feature[1] = 0x00 # segment
-        feature[2] = 0x14 # size
+        feature[2] = 0x3C # size
         feature[3] = 0x00 # padding
         feature[4:4+len(packed)] = packed
 
@@ -477,7 +489,8 @@ class MainWindowFrame(wx.Frame):
             qe1_sens=qe1_sens,
             qe2_sens=0,
             effector_mode=effector_mode,
-            debounce_ticks=debounce_ticks
+            debounce_ticks=debounce_ticks,
+            keycodes=""
         )
 
         return conf
