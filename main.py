@@ -6,10 +6,13 @@ from os import popen
 import pywinusb.hid as hid
 import wx
 # import wx.lib.mixins.inspection
+from usb_hid_keys import *
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
     "label flags qe1_sens qe2_sens effector_mode debounce_ticks")
+
+ARCIN_CONFIG_VALID_KEYCODES = 13
 
 # Infinitas controller VID/PID = 0x1ccf / 0x8048
 VID = 0x1ccf
@@ -51,6 +54,10 @@ E1E2_OPTIONS = [
     "E2, E1",
     "E3, E4",
     "E4, E3",
+]
+
+KEYBINDS = [
+
 ]
 
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
@@ -167,6 +174,8 @@ class MainWindowFrame(wx.Frame):
     keybinds_button = None
     keybinds_frame = None
 
+    keycodes = None
+
     def __init__(self, *args, **kw):
         default_size = (320, 590)
         kw['size'] = default_size
@@ -246,24 +255,21 @@ class MainWindowFrame(wx.Frame):
         row += 1
 
         qe1_tt_label = wx.StaticText(panel, label="QE1 turntable")
-        self.qe1_tt_ctrl = wx.ComboBox(
-            panel, choices=TT_OPTIONS, style=wx.CB_READONLY)
+        self.qe1_tt_ctrl = wx.Choice(panel, choices=TT_OPTIONS)
         self.qe1_tt_ctrl.Select(0)
         grid.Add(qe1_tt_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.qe1_tt_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         qe1_sens_label = wx.StaticText(panel, label="QE1 sensitivity")
-        self.qe1_sens_ctrl = wx.ComboBox(
-            panel, choices=list(SENS_OPTIONS.keys()), style=wx.CB_READONLY)
+        self.qe1_sens_ctrl = wx.Choice(panel, choices=list(SENS_OPTIONS.keys()))
         self.qe1_sens_ctrl.Select(0)
         grid.Add(qe1_sens_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.qe1_sens_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         e1e2_label = wx.StaticText(panel, label="Start and Select")
-        self.e1e2_ctrl = wx.ComboBox(
-            panel, choices=E1E2_OPTIONS, style=wx.CB_READONLY)
+        self.e1e2_ctrl = wx.Choice(panel, choices=E1E2_OPTIONS)
         self.e1e2_ctrl.Select(0)
         grid.Add(e1e2_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.e1e2_ctrl, pos=(row, 1), flag=wx.EXPAND)
@@ -418,7 +424,7 @@ class MainWindowFrame(wx.Frame):
     def on_keybinds_button(self, e):
         if self.keybinds_frame is None:
             self.keybinds_frame = KeybindsWindowFrame(
-                self, title="Configure keybinds")
+                self, title="Configure keybinds", keycodes=self.keycodes)
 
             self.keybinds_frame.Bind(
                 wx.EVT_CLOSE, self.on_keybinds_frame_closed)
@@ -426,6 +432,7 @@ class MainWindowFrame(wx.Frame):
             self.keybinds_frame.Show()
 
     def on_keybinds_frame_closed(self, e):
+        self.keycodes = self.keybinds_frame.extract_keycodes_from_ui()
         self.keybinds_frame.Destroy()
         self.keybinds_frame = None
 
@@ -546,8 +553,16 @@ class MainWindowFrame(wx.Frame):
             self.load_button.Enable(False)
 
 class KeybindsWindowFrame(wx.Frame):
+
+    panel = None
+    grid = None
+    row = 0
+
+    # controls
+    controls_list = []
+
     def __init__(self, *args, **kw):
-        default_size = (320, 590)
+        default_size = (320, 550)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -557,17 +572,172 @@ class KeybindsWindowFrame(wx.Frame):
             wx.CLIP_CHILDREN
         )
 
+        keycodes = kw.pop('keycodes')
+
         # ensure the parent's __init__ is called
         super().__init__(*args, **kw)
 
         # create a panel in the frame
-        panel = wx.Panel(self)
+        self.panel = wx.Panel(self)
         self.SetMinSize(default_size)
-
         box = wx.BoxSizer(wx.VERTICAL)
 
-        panel.SetSizer(box)
+        label = wx.StaticText(self.panel,
+            label="Use any of the presets from the menu above, or configure each key below.")
+        label.Wrap(default_size[0] - 20)
+        box.Add(label, flag=(wx.EXPAND | wx.ALL), border=8)
 
+        self.grid = wx.GridBagSizer(10, 10)
+        self.grid.SetCols(2)
+        self.grid.AddGrowableCol(1)
+
+        self.controls_list = []
+
+        self.__create_button__("Button 1")
+        self.__create_button__("Button 2")
+        self.__create_button__("Button 3")
+        self.__create_button__("Button 4")
+        self.__create_button__("Button 5")
+        self.__create_button__("Button 6")
+        self.__create_button__("Button 7")
+
+        self.__create_button__("E1")
+        self.__create_button__("E2")
+        self.__create_button__("E3")
+        self.__create_button__("E4")
+
+        self.__create_button__("Turntable CW")
+        self.__create_button__("Turntable CCW")
+
+        if keycodes is not None:
+            self.populate_ui_from_keycodes(keycodes)
+
+        box.Add(self.grid, 1, flag=(wx.EXPAND | wx.ALL), border=8)
+        self.panel.SetSizer(box)
+        self.makeMenuBar()
+
+    def makeMenuBar(self):
+        presets_menu = wx.Menu()
+
+        clearall_item = presets_menu.Append(wx.ID_ANY, item="Clear all")
+        buttons_item = presets_menu.Append(wx.ID_ANY, item="All letters")
+        player_1_item = presets_menu.Append(wx.ID_ANY, item="DJMAX 1p")
+        player_2_item = presets_menu.Append(wx.ID_ANY, item="DJMAX 2p")
+
+        menu_bar = wx.MenuBar()
+        menu_bar.Append(presets_menu, "&Load a preset...")
+        self.SetMenuBar(menu_bar)
+        self.Bind(wx.EVT_MENU, self.on_clear_all, clearall_item)
+        self.Bind(wx.EVT_MENU, self.on_buttons, buttons_item)
+        self.Bind(wx.EVT_MENU, self.on_preset_1p, player_1_item)
+        self.Bind(wx.EVT_MENU, self.on_preset_2p, player_2_item)
+
+    def on_clear_all(self, e):
+        keycodes = [0] * ARCIN_CONFIG_VALID_KEYCODES
+        self.populate_ui_from_keycodes(keycodes)
+
+    def on_buttons(self, e):
+        keycodes = [
+            # keys
+            USB_HID_KEYS['Z'],
+            USB_HID_KEYS['S'],
+            USB_HID_KEYS['X'],
+            USB_HID_KEYS['D'],
+            USB_HID_KEYS['C'],
+            USB_HID_KEYS['F'],
+            USB_HID_KEYS['V'],
+
+            # E1 - E4
+            USB_HID_KEYS['Q'],
+            USB_HID_KEYS['W'],
+            USB_HID_KEYS['E'],
+            USB_HID_KEYS['R'],
+
+            # TT CW / CCW
+            USB_HID_KEYS['J'],
+            USB_HID_KEYS['K'],
+        ]
+
+        self.populate_ui_from_keycodes(keycodes)
+
+    def on_preset_1p(self, e):
+        keycodes = [
+            # keys
+            USB_HID_KEYS['Z'],
+            USB_HID_KEYS['S'],
+            USB_HID_KEYS['X'],
+            USB_HID_KEYS['D'],
+            USB_HID_KEYS['C'],
+            USB_HID_KEYS['F'],
+            USB_HID_KEYS['V'],
+
+            # E1 - E4
+            USB_HID_KEYS['ENTER'],
+            USB_HID_KEYS['TAB'],
+            USB_HID_KEYS['SPACE'],
+            USB_HID_KEYS['ESC'],
+
+            # TT CW / CCW
+            USB_HID_KEYS['DOWN'],
+            USB_HID_KEYS['UP'],
+        ]
+
+        self.populate_ui_from_keycodes(keycodes)
+
+    def on_preset_2p(self, e):
+        keycodes = [
+            # keys
+            USB_HID_KEYS['H'],
+            USB_HID_KEYS['U'],
+            USB_HID_KEYS['J'],
+            USB_HID_KEYS['I'],
+            USB_HID_KEYS['K'],
+            USB_HID_KEYS['O'],
+            USB_HID_KEYS['L'],
+
+            # E1 - E4
+            USB_HID_KEYS['ENTER'],
+            USB_HID_KEYS['TAB'],
+            USB_HID_KEYS['LEFTSHIFT'],
+            USB_HID_KEYS['RIGHTSHIFT'],
+
+            # TT CW / CCW
+            USB_HID_KEYS['RIGHT'],
+            USB_HID_KEYS['LEFT'],
+        ]
+        self.populate_ui_from_keycodes(keycodes)
+
+    def populate_ui_from_keycodes(self, keycodes):
+
+        assert(len(self.controls_list) ==
+            len(keycodes) ==
+            ARCIN_CONFIG_VALID_KEYCODES)
+
+        for i, c in enumerate(self.controls_list):
+            keycode = keycodes[i]
+            c.Select(USB_HID_KEYCODES[keycode])
+
+    def extract_keycodes_from_ui(self):
+
+        assert(len(self.controls_list) == ARCIN_CONFIG_VALID_KEYCODES)
+
+        extracted_keycodes = []
+        keycodes = list(USB_HID_KEYCODES.keys())
+        for c in self.controls_list:
+            selected_index = c.GetSelection()
+            extracted_keycodes.append(keycodes[selected_index])
+    
+        return extracted_keycodes
+
+    def __create_button__(self, label):
+        label = wx.StaticText(self.panel, label=label)
+        combobox = wx.Choice(self.panel, choices=list(USB_HID_KEYS.keys()))
+        self.controls_list.append(combobox)
+        combobox.Select(0)
+        self.grid.Add(label, pos=(self.row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(combobox, pos=(self.row, 1), flag=wx.EXPAND)
+        self.row += 1
+        return combobox
 
 def ui_main():
     app = wx.App()
