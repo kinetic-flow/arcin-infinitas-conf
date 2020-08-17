@@ -68,8 +68,10 @@ E1E2_OPTIONS = [
     "E4, E3",
 ]
 
-KEYBINDS = [
-
+INPUT_MODE_OPTIONS = [
+    "Controller only (IIDX, BMS)",
+    "Keyboard only (DJMAX)",
+    "Both controller and keyboard"
 ]
 
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
@@ -80,6 +82,7 @@ ARCIN_CONFIG_FLAG_DEBOUNCE               = (1 << 4)
 ARCIN_CONFIG_FLAG_250HZ_MODE             = (1 << 5)
 ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE = (1 << 6)
 ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE        = (1 << 7)
+ARCIN_CONFIG_FLAG_JOYINPUT_DISABLE       = (1 << 8)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -176,7 +179,6 @@ class MainWindowFrame(wx.Frame):
     qe1_invert_check = None
     swap89_check = None
     debounce_check = None
-    keyboard_check = None
 
     qe1_tt_ctrl = None
     debounce_ctrl = None
@@ -184,13 +186,15 @@ class MainWindowFrame(wx.Frame):
     qe1_sens_ctrl = None
     e1e2_ctrl = None
 
+    input_mode_ctrl = None
+
     keybinds_button = None
     keybinds_frame = None
 
     keycodes = None
 
     def __init__(self, *args, **kw):
-        default_size = (320, 590)
+        default_size = (340, 610)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -259,8 +263,7 @@ class MainWindowFrame(wx.Frame):
         row += 1
 
         debounce_label = wx.StaticText(panel, label="Debounce frames")
-        self.debounce_ctrl = wx.SpinCtrl(
-            panel, min=2, max=255, initial=2)
+        self.debounce_ctrl = wx.SpinCtrl(panel, min=2, max=10, initial=2)
         self.debounce_ctrl.SetToolTip(
             "On 1000hz, 4 frames (=4ms) is recommended. Not recommended for 250hz.")
         grid.Add(debounce_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -287,6 +290,13 @@ class MainWindowFrame(wx.Frame):
         self.e1e2_ctrl.Select(0)
         grid.Add(e1e2_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.e1e2_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        input_mode_label = wx.StaticText(panel, label="Input mode")
+        self.input_mode_ctrl = wx.Choice(panel, choices=INPUT_MODE_OPTIONS)
+        self.input_mode_ctrl.Select(0)
+        grid.Add(input_mode_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.input_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         keybinds_label = wx.StaticText(panel, label="Configure keybinds")
@@ -357,10 +367,6 @@ class MainWindowFrame(wx.Frame):
             "Enables debounce logic for buttons to compensate for switch chatter. Not recommended for 250hz.")
         self.debounce_check.Bind(wx.EVT_CHECKBOX, self.on_debounce_check)
         box.Add(self.debounce_check, **box_kw)
-
-        self.keyboard_check = wx.CheckBox(parent, label="Enable keyboard input")
-        self.keyboard_check.SetToolTip("Enables keyboard mode for games not compatible with gamepads")
-        box.Add(self.keyboard_check, **box_kw)
 
         return box
 
@@ -478,12 +484,15 @@ class MainWindowFrame(wx.Frame):
             flags |= ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE
             flags |= ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE
 
-        if self.keyboard_check.IsChecked():
+        if self.input_mode_ctrl.GetSelection() == 1:
+            # keyboard only
             flags |= ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE
-        if self.keyboard_check.IsChecked():
+            flags |= ARCIN_CONFIG_FLAG_JOYINPUT_DISABLE
+        elif self.input_mode_ctrl.GetSelection() == 2:
+            # both gamepad and keyboard
             flags |= ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE
-
-        if 2 <= self.debounce_ctrl.GetValue() <= 255:
+            
+        if 2 <= self.debounce_ctrl.GetValue() <= 10:
             debounce_ticks = self.debounce_ctrl.GetValue()
         else:
             debounce_ticks = 2
@@ -527,9 +536,6 @@ class MainWindowFrame(wx.Frame):
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
 
-        self.keyboard_check.SetValue(
-            bool(conf.flags & ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE))
-
         if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
             self.poll_rate_ctrl.Select(1)
         else:
@@ -542,6 +548,14 @@ class MainWindowFrame(wx.Frame):
             self.qe1_tt_ctrl.Select(1)
         else:
             self.qe1_tt_ctrl.Select(0)
+
+        if (conf.flags & ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE and
+            conf.flags & ARCIN_CONFIG_FLAG_JOYINPUT_DISABLE):
+            self.input_mode_ctrl.Select(1)
+        elif conf.flags & ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE:
+            self.input_mode_ctrl.Select(2)
+        else:
+            self.input_mode_ctrl.Select(0)
 
         self.debounce_ctrl.SetValue(conf.debounce_ticks)
 
