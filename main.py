@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-import pywinusb.hid as hid
 import struct
 from collections import namedtuple
+from os import popen
+import pywinusb.hid as hid
 import wx
-import wx.adv
-from os import system
 # import wx.lib.mixins.inspection
 
 ArcinConfig = namedtuple(
@@ -61,6 +60,7 @@ ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE      = (1 << 3)
 ARCIN_CONFIG_FLAG_DEBOUNCE               = (1 << 4)
 ARCIN_CONFIG_FLAG_250HZ_MODE             = (1 << 5)
 ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE = (1 << 6)
+ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE        = (1 << 7)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -156,6 +156,7 @@ class MainWindowFrame(wx.Frame):
     qe1_invert_check = None
     swap89_check = None
     debounce_check = None
+    keyboard_check = None
 
     qe1_tt_ctrl = None
     debounce_ctrl = None
@@ -163,8 +164,11 @@ class MainWindowFrame(wx.Frame):
     qe1_sens_ctrl = None
     e1e2_ctrl = None
 
+    keybinds_button = None
+    keybinds_frame = None
+
     def __init__(self, *args, **kw):
-        default_size = (320, 540)
+        default_size = (320, 590)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -175,7 +179,7 @@ class MainWindowFrame(wx.Frame):
         )
 
         # ensure the parent's __init__ is called
-        super(MainWindowFrame, self).__init__(*args, **kw)
+        super().__init__(*args, **kw)
 
         # create a panel in the frame
         panel = wx.Panel(self)
@@ -265,7 +269,15 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.e1e2_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
+        keybinds_label = wx.StaticText(panel, label="Configure keybinds")
+        self.keybinds_button = wx.Button(panel, label="Open")
+        self.keybinds_button.Bind(wx.EVT_BUTTON, self.on_keybinds_button)
+        grid.Add(keybinds_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.keybinds_button, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         box.Add(grid, 1, flag=(wx.EXPAND | wx.ALL), border=8)
+
         panel.SetSizer(box)
 
         self.makeMenuBar()
@@ -283,7 +295,7 @@ class MainWindowFrame(wx.Frame):
 
         options_menu.AppendSeparator()
         
-        about_item = options_menu.Append(wx.ID_ABOUT)
+        about_item = options_menu.Append(wx.ID_ANY, item="Help (opens in browser)")
 
         menu_bar = wx.MenuBar()
         menu_bar.Append(options_menu, "&Tools")
@@ -293,15 +305,10 @@ class MainWindowFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnWinJoy, winjoy_item)
 
     def OnAbout(self, event):
-        info = wx.adv.AboutDialogInfo()
-
-        info.SetName('arcin infinitas conf')
-        info.SetWebSite('https://github.com/minsang-github/arcin-infinitas')
-
-        wx.adv.AboutBox(info)
+        popen("start https://github.com/minsang-github/arcin-infinitas")
 
     def OnWinJoy(self, event):
-        system("joy.cpl")
+        popen("start joy.cpl")
 
     def __create_checklist__(self, parent):
         box_kw = {
@@ -330,6 +337,10 @@ class MainWindowFrame(wx.Frame):
             "Enables debounce logic for buttons to compensate for switch chatter. Not recommended for 250hz.")
         self.debounce_check.Bind(wx.EVT_CHECKBOX, self.on_debounce_check)
         box.Add(self.debounce_check, **box_kw)
+
+        self.keyboard_check = wx.CheckBox(parent, label="Enable keyboard input")
+        self.keyboard_check.SetToolTip("Enables keyboard mode for games not compatible with gamepads")
+        box.Add(self.keyboard_check, **box_kw)
         return box
 
     def on_device_list_select(self, e):
@@ -404,6 +415,20 @@ class MainWindowFrame(wx.Frame):
         else:
             self.SetStatusText("Error: " + error_message)
 
+    def on_keybinds_button(self, e):
+        if self.keybinds_frame is None:
+            self.keybinds_frame = KeybindsWindowFrame(
+                self, title="Configure keybinds")
+
+            self.keybinds_frame.Bind(
+                wx.EVT_CLOSE, self.on_keybinds_frame_closed)
+
+            self.keybinds_frame.Show()
+
+    def on_keybinds_frame_closed(self, e):
+        self.keybinds_frame.Destroy()
+        self.keybinds_frame = None
+
     def __extract_conf_from_gui__(self):
         title = self.title_ctrl.GetValue()
         flags = 0
@@ -424,6 +449,9 @@ class MainWindowFrame(wx.Frame):
         elif self.qe1_tt_ctrl.GetSelection() == 2:
             flags |= ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE
             flags |= ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE
+
+        if self.keyboard_check.IsChecked():
+            flags |= ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE
 
         if 2 <= self.debounce_ctrl.GetValue() <= 255:
             debounce_ticks = self.debounce_ctrl.GetValue()
@@ -462,6 +490,9 @@ class MainWindowFrame(wx.Frame):
 
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
+
+        self.keyboard_check.SetValue(
+            bool(conf.flags & ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE))
 
         if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
             self.poll_rate_ctrl.Select(1)
@@ -513,6 +544,30 @@ class MainWindowFrame(wx.Frame):
         else:
             self.save_button.Enable(False)
             self.load_button.Enable(False)
+
+class KeybindsWindowFrame(wx.Frame):
+    def __init__(self, *args, **kw):
+        default_size = (320, 590)
+        kw['size'] = default_size
+        kw['style'] = (
+            wx.RESIZE_BORDER |
+            wx.SYSTEM_MENU |
+            wx.CAPTION |
+            wx.CLOSE_BOX |
+            wx.CLIP_CHILDREN
+        )
+
+        # ensure the parent's __init__ is called
+        super().__init__(*args, **kw)
+
+        # create a panel in the frame
+        panel = wx.Panel(self)
+        self.SetMinSize(default_size)
+
+        box = wx.BoxSizer(wx.VERTICAL)
+
+        panel.SetSizer(box)
+
 
 def ui_main():
     app = wx.App()
