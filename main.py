@@ -6,7 +6,8 @@ from os import popen
 import pywinusb.hid as hid
 import wx
 # import wx.lib.mixins.inspection
-from usb_hid_keys import *
+from usb_hid_keys import USB_HID_KEYS
+from usb_hid_keys import USB_HID_KEYCODES
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
@@ -33,7 +34,7 @@ STRUCT_FMT_EX = (
     "b" +   # int8 qe2_sens
     "B" +   # uint8 effector_mode
     "B" +   # uint8 debounce_ticks
-    "16s" + # char keycodes[16] (only 13 are used)
+    "16s" + # char keycodes[16]
     "24x")  # uint8 reserved[24]
 
 TT_OPTIONS = [
@@ -125,7 +126,7 @@ def save_to_device(device, conf):
             conf.qe2_sens,
             conf.effector_mode,
             conf.debounce_ticks,
-            conf.keycodes)
+            conf.keycodes[0:16])
     except:
         return (False, "Format error")
 
@@ -274,7 +275,8 @@ class MainWindowFrame(wx.Frame):
         row += 1
 
         qe1_sens_label = wx.StaticText(panel, label="QE1 sensitivity")
-        self.qe1_sens_ctrl = wx.Choice(panel, choices=list(SENS_OPTIONS.keys()))
+        self.qe1_sens_ctrl = wx.ComboBox(
+            panel, choices=list(SENS_OPTIONS.keys()), style=wx.CB_READONLY)
         self.qe1_sens_ctrl.Select(0)
         grid.Add(qe1_sens_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.qe1_sens_ctrl, pos=(row, 1), flag=wx.EXPAND)
@@ -359,6 +361,7 @@ class MainWindowFrame(wx.Frame):
         self.keyboard_check = wx.CheckBox(parent, label="Enable keyboard input")
         self.keyboard_check.SetToolTip("Enables keyboard mode for games not compatible with gamepads")
         box.Add(self.keyboard_check, **box_kw)
+
         return box
 
     def on_device_list_select(self, e):
@@ -379,6 +382,7 @@ class MainWindowFrame(wx.Frame):
         self.__populate_device_list__()
 
     def on_load(self, e):
+        self.close_keybinds_window()
         index = self.devices_list.GetFirstSelected()
         if index < 0:
             return
@@ -410,6 +414,7 @@ class MainWindowFrame(wx.Frame):
             f"Loaded from {device.product_name} ({device.serial_number}).")
 
     def on_save(self, e):
+        self.close_keybinds_window()
         index = self.devices_list.GetFirstSelected()
         if index < 0:
             return
@@ -443,10 +448,14 @@ class MainWindowFrame(wx.Frame):
 
             self.keybinds_frame.Show()
 
+    def close_keybinds_window(self):
+        if self.keybinds_frame:
+            self.keycodes = self.keybinds_frame.extract_keycodes_from_ui()
+            self.keybinds_frame.Destroy()
+            self.keybinds_frame = None
+
     def on_keybinds_frame_closed(self, e):
-        self.keycodes = self.keybinds_frame.extract_keycodes_from_ui()
-        self.keybinds_frame.Destroy()
-        self.keybinds_frame = None
+        self.close_keybinds_window()
 
     def __extract_conf_from_gui__(self):
         title = self.title_ctrl.GetValue()
@@ -471,6 +480,8 @@ class MainWindowFrame(wx.Frame):
 
         if self.keyboard_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE
+        if self.keyboard_check.IsChecked():
+            flags |= ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE
 
         if 2 <= self.debounce_ctrl.GetValue() <= 255:
             debounce_ticks = self.debounce_ctrl.GetValue()
@@ -483,6 +494,11 @@ class MainWindowFrame(wx.Frame):
             qe1_sens = -4 # 1:4: as the reasonable default
 
         effector_mode = self.e1e2_ctrl.GetSelection()
+
+        keycodes = ""
+        if self.keycodes:
+            keycodes = bytes(self.keycodes)
+
         conf = ArcinConfig(
             label=title,
             flags=flags,
@@ -490,7 +506,7 @@ class MainWindowFrame(wx.Frame):
             qe2_sens=0,
             effector_mode=effector_mode,
             debounce_ticks=debounce_ticks,
-            keycodes=""
+            keycodes=keycodes
         )
 
         return conf
@@ -539,6 +555,10 @@ class MainWindowFrame(wx.Frame):
         index = 0 # E1 E2 is a reasonable default
         effector_mode = min(conf.effector_mode, len(E1E2_OPTIONS) - 1)
         self.e1e2_ctrl.Select(effector_mode)
+
+        self.keycodes = []
+        for c in conf.keycodes:
+            self.keycodes.append(c)
 
     def __populate_device_list__(self):
         if self.devices_list is None:
@@ -722,17 +742,19 @@ class KeybindsWindowFrame(wx.Frame):
 
     def populate_ui_from_keycodes(self, keycodes):
 
-        assert(len(self.controls_list) ==
-            len(keycodes) ==
-            ARCIN_CONFIG_VALID_KEYCODES)
+        assert len(self.controls_list) <= len(keycodes)
+        assert len(self.controls_list) == ARCIN_CONFIG_VALID_KEYCODES
 
         for i, c in enumerate(self.controls_list):
             keycode = keycodes[i]
-            c.Select(USB_HID_KEYCODES[keycode])
+            if keycode in USB_HID_KEYCODES:
+                c.Select(USB_HID_KEYCODES[keycode])
+            else:
+                c.Select(0)
 
     def extract_keycodes_from_ui(self):
 
-        assert(len(self.controls_list) == ARCIN_CONFIG_VALID_KEYCODES)
+        assert len(self.controls_list) == ARCIN_CONFIG_VALID_KEYCODES
 
         extracted_keycodes = []
         keycodes = list(USB_HID_KEYCODES.keys())
