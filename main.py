@@ -545,7 +545,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
 
-        self.mode_switching_check.SetValue(
+        self.mode_switch_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE))
 
         if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
