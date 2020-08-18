@@ -2,7 +2,7 @@
 
 import struct
 from collections import namedtuple
-from os import popen
+from os import system
 import pywinusb.hid as hid
 import wx
 # import wx.lib.mixins.inspection
@@ -262,10 +262,8 @@ class MainWindowFrame(wx.Frame):
         grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        debounce_label = wx.StaticText(panel, label="Debounce frames")
+        debounce_label = wx.StaticText(panel, label="Debounce (ms)")
         self.debounce_ctrl = wx.SpinCtrl(panel, min=2, max=10, initial=2)
-        self.debounce_ctrl.SetToolTip(
-            "On 1000hz, 4 frames (=4ms) is recommended. Not recommended for 250hz.")
         grid.Add(debounce_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.debounce_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
@@ -335,10 +333,10 @@ class MainWindowFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnWinJoy, winjoy_item)
 
     def OnAbout(self, event):
-        popen("start https://github.com/minsang-github/arcin-infinitas")
+        system("start https://github.com/minsang-github/arcin-infinitas")
 
     def OnWinJoy(self, event):
-        popen("start joy.cpl")
+        system("start joy.cpl")
 
     def __create_checklist__(self, parent):
         box_kw = {
@@ -350,7 +348,7 @@ class MainWindowFrame(wx.Frame):
         box = wx.BoxSizer(wx.VERTICAL)
         self.multitap_check = wx.CheckBox(parent, label="E2 multi-function")
         self.multitap_check.SetToolTip(
-            "When enabled: press E2 once for E2, twice for E3, three times for E2+E3")
+            "When enabled: press E2 once for E2, twice for E3, three times for E2+E3, four times for E4")
         box.Add(self.multitap_check, **box_kw)
 
         self.qe1_invert_check = wx.CheckBox(parent, label="Invert QE1")
@@ -364,7 +362,7 @@ class MainWindowFrame(wx.Frame):
 
         self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
         self.debounce_check.SetToolTip(
-            "Enables debounce logic for buttons to compensate for switch chatter. Not recommended for 250hz.")
+            "Enables debounce logic for buttons to compensate for switch chatter.")
         self.debounce_check.Bind(wx.EVT_CHECKBOX, self.on_debounce_check)
         box.Add(self.debounce_check, **box_kw)
 
