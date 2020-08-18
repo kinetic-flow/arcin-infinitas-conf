@@ -83,6 +83,7 @@ ARCIN_CONFIG_FLAG_250HZ_MODE             = (1 << 5)
 ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE = (1 << 6)
 ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE        = (1 << 7)
 ARCIN_CONFIG_FLAG_JOYINPUT_DISABLE       = (1 << 8)
+ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE  = (1 << 9)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -179,6 +180,7 @@ class MainWindowFrame(wx.Frame):
     qe1_invert_check = None
     swap89_check = None
     debounce_check = None
+    mode_switch_check = None
 
     qe1_tt_ctrl = None
     debounce_ctrl = None
@@ -194,7 +196,7 @@ class MainWindowFrame(wx.Frame):
     keycodes = None
 
     def __init__(self, *args, **kw):
-        default_size = (340, 610)
+        default_size = (340, 600)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -222,7 +224,7 @@ class MainWindowFrame(wx.Frame):
         self.devices_list.Bind(
             wx.EVT_LIST_ITEM_DESELECTED, self.on_device_list_deselect)
 
-        self.devices_list.SetMaxSize((-1, 100))
+        self.devices_list.SetMaxSize((-1, 70))
         box.Add(self.devices_list, flag=(wx.EXPAND | wx.ALL), border=4)
 
         button_box = wx.BoxSizer(wx.HORIZONTAL)
@@ -268,7 +270,7 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.debounce_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        qe1_tt_label = wx.StaticText(panel, label="QE1 turntable")
+        qe1_tt_label = wx.StaticText(panel, label="QE1 turntable mode")
         self.qe1_tt_ctrl = wx.Choice(panel, choices=TT_OPTIONS)
         self.qe1_tt_ctrl.Select(0)
         grid.Add(qe1_tt_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -356,9 +358,16 @@ class MainWindowFrame(wx.Frame):
             "Inverts the direction of the turntable.")
         box.Add(self.qe1_invert_check, **box_kw)
 
-        self.swap89_check = wx.CheckBox(parent, label="Swap 8/9")
+        self.swap89_check = wx.CheckBox(parent, label="Swap buttons 8 && 9")
         self.swap89_check.SetToolTip("Swaps buttons 8 and 9 (E3 and E4).")
         box.Add(self.swap89_check, **box_kw)
+
+        self.mode_switch_check = wx.CheckBox(parent, label="Enable mode switching")
+        self.mode_switch_check.SetToolTip(
+            """Hold [Start + Sel + 1] for 3 seconds to switch input mode.
+Hold [Start + Sel + 3] for 3 seconds to switch turntable mode.
+These only take in effect while plugged in; they are reset when unplugged""")
+        box.Add(self.mode_switch_check, **box_kw)
 
         self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
         self.debounce_check.SetToolTip(
@@ -472,6 +481,8 @@ class MainWindowFrame(wx.Frame):
             flags |= ARCIN_CONFIG_FLAG_SWAP_8_9
         if self.debounce_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
+        if self.mode_switch_check.IsChecked():
+            flags |= ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE
 
         if self.poll_rate_ctrl.GetSelection() == 1:
             flags |= ARCIN_CONFIG_FLAG_250HZ_MODE
@@ -533,6 +544,9 @@ class MainWindowFrame(wx.Frame):
 
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
+
+        self.mode_switching_check.SetValue(
+            bool(conf.flags & ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE))
 
         if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
             self.poll_rate_ctrl.Select(1)
