@@ -74,6 +74,12 @@ INPUT_MODE_OPTIONS = [
     "Both controller and keyboard"
 ]
 
+LED_OPTIONS = [
+    "Default",
+    "React to QE1 turntable",
+    "HID-controlled",
+]
+
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
 ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
 ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
@@ -84,6 +90,9 @@ ARCIN_CONFIG_FLAG_ANALOG_TT_FORCE_ENABLE = (1 << 6)
 ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE        = (1 << 7)
 ARCIN_CONFIG_FLAG_JOYINPUT_DISABLE       = (1 << 8)
 ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE  = (1 << 9)
+ARCIN_CONFIG_FLAG_LED_OFF                = (1 << 10)
+ARCIN_CONFIG_FLAG_TT_LED_REACTIVE        = (1 << 11)
+ARCIN_CONFIG_FLAG_TT_LED_HID             = (1 << 12)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -181,6 +190,7 @@ class MainWindowFrame(wx.Frame):
     swap89_check = None
     debounce_check = None
     mode_switch_check = None
+    led_off_check = None
 
     qe1_tt_ctrl = None
     debounce_ctrl = None
@@ -190,13 +200,15 @@ class MainWindowFrame(wx.Frame):
 
     input_mode_ctrl = None
 
+    led_mode_ctrl = None
+
     keybinds_button = None
     keybinds_frame = None
 
     keycodes = None
 
     def __init__(self, *args, **kw):
-        default_size = (340, 600)
+        default_size = (340, 640)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -299,6 +311,13 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.input_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
+        led_mode_label = wx.StaticText(panel, label="TT LED mode")
+        self.led_mode_ctrl = wx.Choice(panel, choices=LED_OPTIONS)
+        self.led_mode_ctrl.Select(0)
+        grid.Add(led_mode_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         keybinds_label = wx.StaticText(panel, label="Configure keybinds")
         self.keybinds_button = wx.Button(panel, label="Open")
         self.keybinds_button.Bind(wx.EVT_BUTTON, self.on_keybinds_button)
@@ -366,8 +385,13 @@ class MainWindowFrame(wx.Frame):
         self.mode_switch_check.SetToolTip(
             """Hold [Start + Sel + 1] for 3 seconds to switch input mode.
 Hold [Start + Sel + 3] for 3 seconds to switch turntable mode.
+Hold [Start + Sel + 5] for 3 seconds to switch LED state.
 These only take in effect while plugged in; they are reset when unplugged""")
         box.Add(self.mode_switch_check, **box_kw)
+
+        self.led_off_check = wx.CheckBox(parent, label="Turn off LED")
+        self.swap89_check.SetToolTip("Check this to keep the lights out.")
+        box.Add(self.led_off_check, **box_kw)
 
         self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
         self.debounce_check.SetToolTip(
@@ -483,6 +507,8 @@ These only take in effect while plugged in; they are reset when unplugged""")
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
         if self.mode_switch_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE
+        if self.led_off_check.IsChecked():
+            flags |= ARCIN_CONFIG_FLAG_LED_OFF
 
         if self.poll_rate_ctrl.GetSelection() == 1:
             flags |= ARCIN_CONFIG_FLAG_250HZ_MODE
@@ -500,6 +526,11 @@ These only take in effect while plugged in; they are reset when unplugged""")
         elif self.input_mode_ctrl.GetSelection() == 2:
             # both gamepad and keyboard
             flags |= ARCIN_CONFIG_FLAG_KEYBOARD_ENABLE
+
+        if self.led_mode_ctrl.GetSelection() == 1:
+            flags |= ARCIN_CONFIG_FLAG_TT_LED_REACTIVE
+        elif self.led_mode_ctrl.GetSelection() == 2:
+            flags |= ARCIN_CONFIG_FLAG_TT_LED_HID
             
         if 2 <= self.debounce_ctrl.GetValue() <= 10:
             debounce_ticks = self.debounce_ctrl.GetValue()
@@ -548,6 +579,9 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.mode_switch_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE))
 
+        self.led_off_check.SetValue(
+            bool(conf.flags & ARCIN_CONFIG_FLAG_LED_OFF))
+
         if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
             self.poll_rate_ctrl.Select(1)
         else:
@@ -568,6 +602,13 @@ These only take in effect while plugged in; they are reset when unplugged""")
             self.input_mode_ctrl.Select(2)
         else:
             self.input_mode_ctrl.Select(0)
+
+        if conf.flags & ARCIN_CONFIG_FLAG_TT_LED_REACTIVE:
+            self.led_mode_ctrl.Select(1)
+        elif conf.flags & ARCIN_CONFIG_FLAG_TT_LED_HID:
+            self.led_mode_ctrl.Select(2)
+        else:
+            self.led_mode_ctrl.Select(0)
 
         self.debounce_ctrl.SetValue(conf.debounce_ticks)
 
