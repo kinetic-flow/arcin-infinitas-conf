@@ -390,7 +390,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         box.Add(self.mode_switch_check, **box_kw)
 
         self.led_off_check = wx.CheckBox(parent, label="Turn off LED")
-        self.swap89_check.SetToolTip("Check this to keep the lights out.")
+        self.led_off_check.SetToolTip("Check this to keep the lights out.")
         box.Add(self.led_off_check, **box_kw)
 
         self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
