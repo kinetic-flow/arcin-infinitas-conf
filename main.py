@@ -19,13 +19,6 @@ ARCIN_CONFIG_VALID_KEYCODES = 13
 VID = 0x1ccf
 PID = 0x8048
 CONFIG_SEGMENT_ID = hid.get_full_usage_id(0xff55, 0xc0ff)
-STRUCT_FMT_ORIGNAL = (
-    "12s" + # uint8 label[12]
-    "L" +   # uint32 flags
-    "b" +   # int8 qe1_sens
-    "b" +   # int8 qe2_sens
-    "B" +   # uint8 effector_mode
-    "B")    # uint8 debounce_ticks
 
 STRUCT_FMT_EX = (
     "12s" + # uint8 label[12]
@@ -61,11 +54,11 @@ SENS_OPTIONS = {
     "16:1": 16
 }
 
-E1E2_OPTIONS = [
-    "E1, E2",
-    "E2, E1",
-    "E3, E4",
-    "E4, E3",
+EFFECTOR_NAMES = [
+    "E1",
+    "E2",
+    "E3",
+    "E4",
 ]
 
 INPUT_MODE_OPTIONS = [
@@ -82,7 +75,8 @@ LED_OPTIONS = [
 
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
 ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
-ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
+# removed in favor of complete remapping of E buttons
+# ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
 ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE      = (1 << 3)
 ARCIN_CONFIG_FLAG_DEBOUNCE               = (1 << 4)
 ARCIN_CONFIG_FLAG_250HZ_MODE             = (1 << 5)
@@ -187,7 +181,6 @@ class MainWindowFrame(wx.Frame):
 
     multitap_check = None
     qe1_invert_check = None
-    swap89_check = None
     debounce_check = None
     mode_switch_check = None
     led_off_check = None
@@ -196,7 +189,11 @@ class MainWindowFrame(wx.Frame):
     debounce_ctrl = None
 
     qe1_sens_ctrl = None
-    e1e2_ctrl = None
+
+    remap_start_ctrl = None
+    remap_select_ctrl = None
+    remap_b8_ctrl = None
+    remap_b9_ctrl = None
 
     input_mode_ctrl = None
 
@@ -297,11 +294,36 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.qe1_sens_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        e1e2_label = wx.StaticText(panel, label="Start and Select")
-        self.e1e2_ctrl = wx.Choice(panel, choices=E1E2_OPTIONS)
-        self.e1e2_ctrl.Select(0)
-        grid.Add(e1e2_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        grid.Add(self.e1e2_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        self.remap_start_ctrl = wx.Choice(panel, choices=EFFECTOR_NAMES)
+        self.remap_start_ctrl.Select(0)
+        grid.Add(
+            wx.StaticText(panel, label="Start Button"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.remap_start_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.remap_select_ctrl = wx.Choice(panel, choices=EFFECTOR_NAMES)
+        self.remap_select_ctrl.Select(1)
+        grid.Add(
+            wx.StaticText(panel, label="Select Button"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.remap_select_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.remap_b8_ctrl = wx.Choice(panel, choices=EFFECTOR_NAMES)
+        self.remap_b8_ctrl.Select(2)
+        grid.Add(
+            wx.StaticText(panel, label="Button 8"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.remap_b8_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.remap_b8_ctrl = wx.Choice(panel, choices=EFFECTOR_NAMES)
+        self.remap_b8_ctrl.Select(3)
+        grid.Add(
+            wx.StaticText(panel, label="Button 9"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.remap_b8_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         input_mode_label = wx.StaticText(panel, label="Input mode")
@@ -376,10 +398,6 @@ class MainWindowFrame(wx.Frame):
         self.qe1_invert_check.SetToolTip(
             "Inverts the direction of the turntable.")
         box.Add(self.qe1_invert_check, **box_kw)
-
-        self.swap89_check = wx.CheckBox(parent, label="Swap buttons 8 && 9")
-        self.swap89_check.SetToolTip("Swaps buttons 8 and 9 (E3 and E4).")
-        box.Add(self.swap89_check, **box_kw)
 
         self.mode_switch_check = wx.CheckBox(parent, label="Enable mode switching")
         self.mode_switch_check.SetToolTip(
@@ -501,8 +519,6 @@ These only take in effect while plugged in; they are reset when unplugged""")
             flags |= ARCIN_CONFIG_FLAG_SEL_MULTI_TAP
         if self.qe1_invert_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_INVERT_QE1
-        if self.swap89_check.IsChecked():
-            flags |= ARCIN_CONFIG_FLAG_SWAP_8_9
         if self.debounce_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
         if self.mode_switch_check.IsChecked():
@@ -569,9 +585,6 @@ These only take in effect while plugged in; they are reset when unplugged""")
 
         self.qe1_invert_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_INVERT_QE1))
-
-        self.swap89_check.SetValue(
-            bool(conf.flags & ARCIN_CONFIG_FLAG_SWAP_8_9))
 
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
