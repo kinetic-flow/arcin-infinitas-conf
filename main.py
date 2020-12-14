@@ -29,7 +29,7 @@ STRUCT_FMT_EX = (
     "B" +   # uint8 debounce_ticks
     "16s" + # char keycodes[16]
     "B" +   # uint8 remap_start_sel
-    "B" +   # uint8 remap_b8_b9
+    "B" +   # uint8     
     "22x")  # uint8 reserved[24]
 
 TT_OPTIONS = [
@@ -57,10 +57,10 @@ SENS_OPTIONS = {
 }
 
 EFFECTOR_NAMES = [
-    "E1",
-    "E2",
-    "E3",
-    "E4",
+    "E1 (JOY 9)",
+    "E2 (JOY 10)",
+    "E3 (JOY 11)",
+    "E4 (JOY 12)",
 ]
 
 DEFAULT_EFFECTOR_MAPPING = [
