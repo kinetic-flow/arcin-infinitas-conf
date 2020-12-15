@@ -11,7 +11,7 @@ from usb_hid_keys import USB_HID_KEYCODES
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
-    "label flags qe1_sens qe2_sens effector_mode debounce_ticks keycodes")
+    "label flags qe1_sens qe2_sens debounce_ticks keycodes remap_start_sel remap_b8_b9")
 
 ARCIN_CONFIG_VALID_KEYCODES = 13
 
@@ -19,23 +19,18 @@ ARCIN_CONFIG_VALID_KEYCODES = 13
 VID = 0x1ccf
 PID = 0x8048
 CONFIG_SEGMENT_ID = hid.get_full_usage_id(0xff55, 0xc0ff)
-STRUCT_FMT_ORIGNAL = (
-    "12s" + # uint8 label[12]
-    "L" +   # uint32 flags
-    "b" +   # int8 qe1_sens
-    "b" +   # int8 qe2_sens
-    "B" +   # uint8 effector_mode
-    "B")    # uint8 debounce_ticks
 
 STRUCT_FMT_EX = (
     "12s" + # uint8 label[12]
     "L" +   # uint32 flags
     "b" +   # int8 qe1_sens
     "b" +   # int8 qe2_sens
-    "B" +   # uint8 effector_mode
+    "x" +   # uint8 reserved (was: effector_mode)
     "B" +   # uint8 debounce_ticks
     "16s" + # char keycodes[16]
-    "24x")  # uint8 reserved[24]
+    "B" +   # uint8 remap_start_sel
+    "B" +   # uint8     
+    "22x")  # uint8 reserved[24]
 
 TT_OPTIONS = [
     "Analog only (Infinitas)",
@@ -61,11 +56,18 @@ SENS_OPTIONS = {
     "16:1": 16
 }
 
-E1E2_OPTIONS = [
-    "E1, E2",
-    "E2, E1",
-    "E3, E4",
-    "E4, E3",
+EFFECTOR_NAMES = [
+    "E1 (JOY 9)",
+    "E2 (JOY 10)",
+    "E3 (JOY 11)",
+    "E4 (JOY 12)",
+]
+
+DEFAULT_EFFECTOR_MAPPING = [
+    1, # start = e1
+    2, # sel = e2
+    3, # b8 = e3
+    4  # b9 = e4
 ]
 
 INPUT_MODE_OPTIONS = [
@@ -82,7 +84,8 @@ LED_OPTIONS = [
 
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
 ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
-ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
+# removed in favor of complete remapping of E buttons
+# ARCIN_CONFIG_FLAG_SWAP_8_9               = (1 << 2)
 ARCIN_CONFIG_FLAG_DIGITAL_TT_ENABLE      = (1 << 3)
 ARCIN_CONFIG_FLAG_DEBOUNCE               = (1 << 4)
 ARCIN_CONFIG_FLAG_250HZ_MODE             = (1 << 5)
@@ -137,9 +140,10 @@ def save_to_device(device, conf):
             conf.flags,
             conf.qe1_sens,
             conf.qe2_sens,
-            conf.effector_mode,
             conf.debounce_ticks,
-            conf.keycodes[0:16])
+            conf.keycodes[0:16],
+            conf.remap_start_sel,
+            conf.remap_b8_b9)
     except:
         return (False, "Format error")
 
@@ -187,7 +191,6 @@ class MainWindowFrame(wx.Frame):
 
     multitap_check = None
     qe1_invert_check = None
-    swap89_check = None
     debounce_check = None
     mode_switch_check = None
     led_off_check = None
@@ -196,15 +199,17 @@ class MainWindowFrame(wx.Frame):
     debounce_ctrl = None
 
     qe1_sens_ctrl = None
-    e1e2_ctrl = None
 
     input_mode_ctrl = None
 
     led_mode_ctrl = None
 
+    remapper_button = None
+    remapper_frame = None
+    remap = DEFAULT_EFFECTOR_MAPPING.copy()
+
     keybinds_button = None
     keybinds_frame = None
-
     keycodes = None
 
     def __init__(self, *args, **kw):
@@ -297,13 +302,6 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.qe1_sens_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        e1e2_label = wx.StaticText(panel, label="Start and Select")
-        self.e1e2_ctrl = wx.Choice(panel, choices=E1E2_OPTIONS)
-        self.e1e2_ctrl.Select(0)
-        grid.Add(e1e2_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        grid.Add(self.e1e2_ctrl, pos=(row, 1), flag=wx.EXPAND)
-        row += 1
-
         input_mode_label = wx.StaticText(panel, label="Input mode")
         self.input_mode_ctrl = wx.Choice(panel, choices=INPUT_MODE_OPTIONS)
         self.input_mode_ctrl.Select(0)
@@ -318,7 +316,14 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        keybinds_label = wx.StaticText(panel, label="Configure keybinds")
+        remapper_label = wx.StaticText(panel, label="Configure gamepad")
+        self.remapper_button = wx.Button(panel, label="Open")
+        self.remapper_button.Bind(wx.EVT_BUTTON, self.on_remapper_button)
+        grid.Add(remapper_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.remapper_button, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        keybinds_label = wx.StaticText(panel, label="Configure keyboard")
         self.keybinds_button = wx.Button(panel, label="Open")
         self.keybinds_button.Bind(wx.EVT_BUTTON, self.on_keybinds_button)
         grid.Add(keybinds_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -377,10 +382,6 @@ class MainWindowFrame(wx.Frame):
             "Inverts the direction of the turntable.")
         box.Add(self.qe1_invert_check, **box_kw)
 
-        self.swap89_check = wx.CheckBox(parent, label="Swap buttons 8 && 9")
-        self.swap89_check.SetToolTip("Swaps buttons 8 and 9 (E3 and E4).")
-        box.Add(self.swap89_check, **box_kw)
-
         self.mode_switch_check = wx.CheckBox(parent, label="Enable mode switching")
         self.mode_switch_check.SetToolTip(
             """Hold [Start + Sel + 1] for 3 seconds to switch input mode.
@@ -419,6 +420,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.__populate_device_list__()
 
     def on_load(self, e):
+        self.close_remapper_window()
         self.close_keybinds_window()
         index = self.devices_list.GetFirstSelected()
         if index < 0:
@@ -451,6 +453,8 @@ These only take in effect while plugged in; they are reset when unplugged""")
             f"Loaded from {device.product_name} ({device.serial_number}).")
 
     def on_save(self, e):
+        # close windows to ensure values get extracted from UI on close
+        self.close_remapper_window()
         self.close_keybinds_window()
         index = self.devices_list.GetFirstSelected()
         if index < 0:
@@ -475,21 +479,40 @@ These only take in effect while plugged in; they are reset when unplugged""")
         else:
             self.SetStatusText("Error: " + error_message)
 
+    def on_remapper_button(self, e):
+        if self.remapper_frame is None:
+            self.remapper_frame = RemapperWindowFrame(
+                self, title="Configure gamepad", remap=self.remap)
+
+            self.remapper_frame.Bind(
+                wx.EVT_CLOSE, self.on_remapper_frame_closed)
+
+            self.remapper_frame.Show()
+
     def on_keybinds_button(self, e):
         if self.keybinds_frame is None:
             self.keybinds_frame = KeybindsWindowFrame(
-                self, title="Configure keybinds", keycodes=self.keycodes)
+                self, title="Configure keyboard", keycodes=self.keycodes)
 
             self.keybinds_frame.Bind(
                 wx.EVT_CLOSE, self.on_keybinds_frame_closed)
 
             self.keybinds_frame.Show()
 
+    def close_remapper_window(self):
+        if self.remapper_frame:
+            self.remap = self.remapper_frame.extract_remap_from_ui()
+            self.remapper_frame.Destroy()
+            self.remapper_frame = None
+
     def close_keybinds_window(self):
         if self.keybinds_frame:
             self.keycodes = self.keybinds_frame.extract_keycodes_from_ui()
             self.keybinds_frame.Destroy()
             self.keybinds_frame = None
+
+    def on_remapper_frame_closed(self, e):
+        self.close_remapper_window()
 
     def on_keybinds_frame_closed(self, e):
         self.close_keybinds_window()
@@ -501,8 +524,6 @@ These only take in effect while plugged in; they are reset when unplugged""")
             flags |= ARCIN_CONFIG_FLAG_SEL_MULTI_TAP
         if self.qe1_invert_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_INVERT_QE1
-        if self.swap89_check.IsChecked():
-            flags |= ARCIN_CONFIG_FLAG_SWAP_8_9
         if self.debounce_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_DEBOUNCE
         if self.mode_switch_check.IsChecked():
@@ -542,20 +563,23 @@ These only take in effect while plugged in; they are reset when unplugged""")
         else:
             qe1_sens = -4 # 1:4: as the reasonable default
 
-        effector_mode = self.e1e2_ctrl.GetSelection()
-
-        keycodes = ""
         if self.keycodes:
             keycodes = bytes(self.keycodes)
+        else:
+            keycodes = bytes([0] * ARCIN_CONFIG_VALID_KEYCODES)
+
+        remap_start_sel = (self.remap[0] << 4) | self.remap[1]
+        remap_b8_b9 = (self.remap[2] << 4) | self.remap[3]
 
         conf = ArcinConfig(
             label=title,
             flags=flags,
             qe1_sens=qe1_sens,
             qe2_sens=0,
-            effector_mode=effector_mode,
             debounce_ticks=debounce_ticks,
-            keycodes=keycodes
+            keycodes=keycodes,
+            remap_start_sel=remap_start_sel,
+            remap_b8_b9=remap_b8_b9
         )
 
         return conf
@@ -569,9 +593,6 @@ These only take in effect while plugged in; they are reset when unplugged""")
 
         self.qe1_invert_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_INVERT_QE1))
-
-        self.swap89_check.SetValue(
-            bool(conf.flags & ARCIN_CONFIG_FLAG_SWAP_8_9))
 
         self.debounce_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_DEBOUNCE))
@@ -619,13 +640,14 @@ These only take in effect while plugged in; they are reset when unplugged""")
                 break
         self.qe1_sens_ctrl.Select(index)
 
-        index = 0 # E1 E2 is a reasonable default
-        effector_mode = min(conf.effector_mode, len(E1E2_OPTIONS) - 1)
-        self.e1e2_ctrl.Select(effector_mode)
-
         self.keycodes = []
         for c in conf.keycodes:
             self.keycodes.append(c)
+
+        self.remap[0] = (conf.remap_start_sel >> 4) & 0xF
+        self.remap[1] = conf.remap_start_sel & 0xF
+        self.remap[2] = (conf.remap_b8_b9 >> 4) & 0xF
+        self.remap[3] = conf.remap_b8_b9 & 0xF
 
     def __populate_device_list__(self):
         if self.devices_list is None:
@@ -840,6 +862,95 @@ class KeybindsWindowFrame(wx.Frame):
         self.grid.Add(combobox, pos=(self.row, 1), flag=wx.EXPAND)
         self.row += 1
         return combobox
+
+class RemapperWindowFrame(wx.Frame):
+
+    panel = None
+    grid = None
+
+    remap_start_ctrl = None
+    remap_select_ctrl = None
+    remap_b8_ctrl = None
+    remap_b9_ctrl = None
+
+    def __init__(self, *args, **kw):
+        default_size = (300, 200)
+        kw['size'] = default_size
+        kw['style'] = (
+            wx.RESIZE_BORDER |
+            wx.SYSTEM_MENU |
+            wx.CAPTION |
+            wx.CLOSE_BOX |
+            wx.CLIP_CHILDREN
+        )
+
+        remap = kw.pop('remap')
+
+        # ensure the parent's __init__ is called
+        super().__init__(*args, **kw)
+
+        # create a panel in the frame
+        self.panel = wx.Panel(self)
+        self.SetMinSize(default_size)
+        box = wx.BoxSizer(wx.VERTICAL)
+
+        self.grid = wx.GridBagSizer(10, 10)
+        self.grid.SetCols(2)
+        self.grid.AddGrowableCol(1)
+        row = 0    
+
+        self.remap_start_ctrl = wx.Choice(self.panel, choices=EFFECTOR_NAMES)
+        self.grid.Add(
+            wx.StaticText(self.panel, label="Start Button"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.remap_start_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.remap_select_ctrl = wx.Choice(self.panel, choices=EFFECTOR_NAMES)
+        self.grid.Add(
+            wx.StaticText(self.panel, label="Select Button"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.remap_select_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.remap_b8_ctrl = wx.Choice(self.panel, choices=EFFECTOR_NAMES)
+        self.grid.Add(
+            wx.StaticText(self.panel, label="Button 8"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.remap_b8_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.remap_b9_ctrl = wx.Choice(self.panel, choices=EFFECTOR_NAMES)
+        self.grid.Add(
+            wx.StaticText(self.panel, label="Button 9"),
+            pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.remap_b9_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+    
+        box.Add(self.grid, 1, flag=(wx.EXPAND | wx.ALL), border=8)
+        self.panel.SetSizer(box)
+
+        if remap is not None:
+            self.populate_ui_from_remap(remap)
+
+    def populate_ui_from_remap(self, remap):
+        for i, value in enumerate(remap):
+            if value == 0:
+                remap[i] = DEFAULT_EFFECTOR_MAPPING[i]
+
+        self.remap_start_ctrl.Select(remap[0] - 1)
+        self.remap_select_ctrl.Select(remap[1] - 1)
+        self.remap_b8_ctrl.Select(remap[2] - 1)
+        self.remap_b9_ctrl.Select(remap[3] - 1)
+
+    def extract_remap_from_ui(self):
+        remap = [
+            self.remap_start_ctrl.GetSelection() + 1,
+            self.remap_select_ctrl.GetSelection() + 1,
+            self.remap_b8_ctrl.GetSelection() + 1,
+            self.remap_b9_ctrl.GetSelection() + 1,
+        ]
+        return remap
 
 def ui_main():
     app = wx.App()
