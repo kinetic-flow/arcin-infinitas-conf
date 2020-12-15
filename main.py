@@ -563,9 +563,10 @@ These only take in effect while plugged in; they are reset when unplugged""")
         else:
             qe1_sens = -4 # 1:4: as the reasonable default
 
-        keycodes = ""
         if self.keycodes:
             keycodes = bytes(self.keycodes)
+        else:
+            keycodes = bytes([0] * ARCIN_CONFIG_VALID_KEYCODES)
 
         remap_start_sel = (self.remap[0] << 4) | self.remap[1]
         remap_b8_b9 = (self.remap[2] << 4) | self.remap[3]
