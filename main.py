@@ -11,9 +11,15 @@ from usb_hid_keys import USB_HID_KEYCODES
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
-    "label flags qe1_sens qe2_sens debounce_ticks keycodes remap_start_sel remap_b8_b9")
+    "label flags qe1_sens qe2_sens " +
+    "debounce_ticks keycodes " +
+    "remap_start_sel remap_b8_b9 "+
+    "rgb_flags rgb_red rgb_green rgb_blue rgb_darkness")
+
+RgbConfig = namedtuple("RgbConfig", "flags red green blue darkness")
 
 ARCIN_CONFIG_VALID_KEYCODES = 13
+ARCIN_RGB_MAX_DARKNESS = 255
 
 # Infinitas controller VID/PID = 0x1ccf / 0x8048
 VID = 0x1ccf
@@ -29,8 +35,14 @@ STRUCT_FMT_EX = (
     "B" +   # uint8 debounce_ticks
     "16s" + # char keycodes[16]
     "B" +   # uint8 remap_start_sel
-    "B" +   # uint8     
-    "22x")  # uint8 reserved[24]
+    "B" +   # uint8 remap_b8_b9
+    "2x"+   # uint8 reserved[2]
+    "B" +   # uint8 rgb_flags
+    "B" +   # uint8 red
+    "B" +   # uint8 green
+    "B" +   # uint8 blue
+    "B" +   # uint8 rgb_darkness
+    "15x")  # uint8 reserved[15]
 
 TT_OPTIONS = [
     "Analog only (Infinitas)",
@@ -96,6 +108,9 @@ ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE  = (1 << 9)
 ARCIN_CONFIG_FLAG_LED_OFF                = (1 << 10)
 ARCIN_CONFIG_FLAG_TT_LED_REACTIVE        = (1 << 11)
 ARCIN_CONFIG_FLAG_TT_LED_HID             = (1 << 12)
+ARCIN_CONFIG_FLAG_WS2812B                = (1 << 13)
+
+ARCIN_RGB_FLAG_ENABLE_HID                = (1 << 0)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -143,7 +158,12 @@ def save_to_device(device, conf):
             conf.debounce_ticks,
             conf.keycodes[0:16],
             conf.remap_start_sel,
-            conf.remap_b8_b9)
+            conf.remap_b8_b9, 
+            conf.rgb_flags,
+            conf.rgb_red,
+            conf.rgb_green,
+            conf.rgb_blue,
+            conf.rgb_darkness)
     except:
         return (False, "Format error")
 
@@ -194,6 +214,7 @@ class MainWindowFrame(wx.Frame):
     debounce_check = None
     mode_switch_check = None
     led_off_check = None
+    ws2812b_check = None
 
     qe1_tt_ctrl = None
     debounce_ctrl = None
@@ -212,8 +233,12 @@ class MainWindowFrame(wx.Frame):
     keybinds_frame = None
     keycodes = None
 
+    rgb_button = None
+    rgb_frame = None
+    rgb_config = None
+
     def __init__(self, *args, **kw):
-        default_size = (340, 640)
+        default_size = (340, 680)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -330,6 +355,13 @@ class MainWindowFrame(wx.Frame):
         grid.Add(self.keybinds_button, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
+        rgb_label = wx.StaticText(panel, label="Configure WS2812B")
+        self.rgb_button = wx.Button(panel, label="Open")
+        self.rgb_button.Bind(wx.EVT_BUTTON, self.on_rgb_button)
+        grid.Add(rgb_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.rgb_button, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         box.Add(grid, 1, flag=(wx.EXPAND | wx.ALL), border=8)
 
         panel.SetSizer(box)
@@ -400,6 +432,10 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.debounce_check.Bind(wx.EVT_CHECKBOX, self.on_debounce_check)
         box.Add(self.debounce_check, **box_kw)
 
+        self.ws2812b_check = wx.CheckBox(parent, label="Enable WS2812B for B9")
+        self.ws2812b_check.SetToolTip("Use button 9 pins as WS2812B output.")
+        box.Add(self.ws2812b_check, **box_kw)
+
         return box
 
     def on_device_list_select(self, e):
@@ -422,6 +458,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
     def on_load(self, e):
         self.close_remapper_window()
         self.close_keybinds_window()
+        self.close_rgb_window()
         index = self.devices_list.GetFirstSelected()
         if index < 0:
             return
@@ -456,6 +493,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         # close windows to ensure values get extracted from UI on close
         self.close_remapper_window()
         self.close_keybinds_window()
+        self.close_rgb_window()
         index = self.devices_list.GetFirstSelected()
         if index < 0:
             return
@@ -499,6 +537,16 @@ These only take in effect while plugged in; they are reset when unplugged""")
 
             self.keybinds_frame.Show()
 
+    def on_rgb_button(self, e):
+        if self.rgb_frame is None:
+            self.rgb_frame = RgbWindowFrame(
+                self, title="Configure WS2812B", rgb_config=self.rgb_config)
+
+            self.rgb_frame.Bind(
+                wx.EVT_CLOSE, self.on_rgb_frame_closed)
+
+            self.rgb_frame.Show()
+
     def close_remapper_window(self):
         if self.remapper_frame:
             self.remap = self.remapper_frame.extract_remap_from_ui()
@@ -511,11 +559,20 @@ These only take in effect while plugged in; they are reset when unplugged""")
             self.keybinds_frame.Destroy()
             self.keybinds_frame = None
 
+    def close_rgb_window(self):
+        if self.rgb_frame:
+            self.rgb_config = self.rgb_frame.extract_from_ui()
+            self.rgb_frame.Destroy()
+            self.rgb_frame = None
+
     def on_remapper_frame_closed(self, e):
         self.close_remapper_window()
 
     def on_keybinds_frame_closed(self, e):
         self.close_keybinds_window()
+
+    def on_rgb_frame_closed(self, e):
+        self.close_rgb_window()
 
     def __extract_conf_from_gui__(self):
         title = self.title_ctrl.GetValue()
@@ -530,6 +587,8 @@ These only take in effect while plugged in; they are reset when unplugged""")
             flags |= ARCIN_CONFIG_FLAG_MODE_SWITCHING_ENABLE
         if self.led_off_check.IsChecked():
             flags |= ARCIN_CONFIG_FLAG_LED_OFF
+        if self.ws2812b_check.IsChecked():
+            flags |= ARCIN_CONFIG_FLAG_WS2812B
 
         if self.poll_rate_ctrl.GetSelection() == 1:
             flags |= ARCIN_CONFIG_FLAG_250HZ_MODE
@@ -571,6 +630,16 @@ These only take in effect while plugged in; they are reset when unplugged""")
         remap_start_sel = (self.remap[0] << 4) | self.remap[1]
         remap_b8_b9 = (self.remap[2] << 4) | self.remap[3]
 
+        rgb_flags = 0
+        rgb_red = 0
+        rgb_green = 0
+        rgb_blue = 0
+        rgb_darkness = 0
+        if self.rgb_config:
+            rgb_flags = self.rgb_config.flags
+            rgb_red, rgb_green, rgb_blue = self.rgb_config.red, self.rgb_config.green, self.rgb_config.blue
+            rgb_darkness = self.rgb_config.darkness
+
         conf = ArcinConfig(
             label=title,
             flags=flags,
@@ -579,7 +648,12 @@ These only take in effect while plugged in; they are reset when unplugged""")
             debounce_ticks=debounce_ticks,
             keycodes=keycodes,
             remap_start_sel=remap_start_sel,
-            remap_b8_b9=remap_b8_b9
+            remap_b8_b9=remap_b8_b9,
+            rgb_flags=rgb_flags,
+            rgb_red=rgb_red,
+            rgb_green=rgb_green,
+            rgb_blue=rgb_blue,
+            rgb_darkness=rgb_darkness
         )
 
         return conf
@@ -602,6 +676,9 @@ These only take in effect while plugged in; they are reset when unplugged""")
 
         self.led_off_check.SetValue(
             bool(conf.flags & ARCIN_CONFIG_FLAG_LED_OFF))
+
+        self.ws2812b_check.SetValue(
+            bool(conf.flags & ARCIN_CONFIG_FLAG_WS2812B))
 
         if conf.flags & ARCIN_CONFIG_FLAG_250HZ_MODE:
             self.poll_rate_ctrl.Select(1)
@@ -648,6 +725,9 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.remap[1] = conf.remap_start_sel & 0xF
         self.remap[2] = (conf.remap_b8_b9 >> 4) & 0xF
         self.remap[3] = conf.remap_b8_b9 & 0xF
+
+        self.rgb_config = RgbConfig(
+            conf.rgb_flags, conf.rgb_red, conf.rgb_green, conf.rgb_blue, conf.rgb_darkness)
 
     def __populate_device_list__(self):
         if self.devices_list is None:
@@ -951,6 +1031,96 @@ class RemapperWindowFrame(wx.Frame):
             self.remap_b9_ctrl.GetSelection() + 1,
         ]
         return remap
+
+class RgbWindowFrame(wx.Frame):
+
+    panel = None
+    grid = None
+
+    hid_rgb_check = None
+    rgb_button = None
+    intensity_slider = None
+
+    def __init__(self, *args, **kw):
+        default_size = (300, 180)
+        kw['size'] = default_size
+        kw['style'] = (
+            wx.RESIZE_BORDER |
+            wx.SYSTEM_MENU |
+            wx.CAPTION |
+            wx.CLOSE_BOX |
+            wx.CLIP_CHILDREN
+        )
+
+        rgb_config = kw.pop('rgb_config')
+
+        # ensure the parent's __init__ is called
+        super().__init__(*args, **kw)
+
+        # create a panel in the frame
+        self.panel = wx.Panel(self)
+        self.SetMinSize(default_size)
+        box = wx.BoxSizer(wx.VERTICAL)
+
+        self.grid = wx.GridBagSizer(10, 10)
+        self.grid.SetCols(2)
+        self.grid.AddGrowableCol(1)
+        row = 0
+
+        checklist_label = wx.StaticText(self.panel, label="Options")
+        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
+        checklist_box = self.__create_checklist__(self.panel)
+        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        intensity_label = wx.StaticText(self.panel, label="Brightness")
+        self.intensity_slider = wx.Slider(
+            self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=ARCIN_RGB_MAX_DARKNESS)
+        self.intensity_slider.SetTickFreq = 1
+        self.grid.Add(intensity_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.intensity_slider, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        rgb_label = wx.StaticText(self.panel, label="Default color")
+        self.rgb_button = wx.ColourPickerCtrl(self.panel)
+        self.grid.Add(rgb_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.rgb_button, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+    
+        box.Add(self.grid, 1, flag=(wx.EXPAND | wx.ALL), border=8)
+        self.panel.SetSizer(box)
+
+        if rgb_config is not None:
+            self.populate_ui(rgb_config)
+
+    def populate_ui(self, rgb):
+        self.hid_rgb_check.SetValue(bool(rgb.flags & ARCIN_RGB_FLAG_ENABLE_HID))
+        self.rgb_button.SetColour(wx.Colour(rgb.red, rgb.green, rgb.blue))
+        self.intensity_slider.SetValue(ARCIN_RGB_MAX_DARKNESS - rgb.darkness)
+        pass
+
+    def extract_from_ui(self):
+        flags = 0
+        if self.hid_rgb_check.IsChecked():
+            flags |= ARCIN_RGB_FLAG_ENABLE_HID
+
+        rgb = self.rgb_button.GetColour()
+        intensity = ARCIN_RGB_MAX_DARKNESS - self.intensity_slider.GetValue()
+        return RgbConfig(flags, rgb.red, rgb.green, rgb.blue, intensity)
+
+    def __create_checklist__(self, parent):
+        box_kw = {
+            "proportion": 0,
+            "flag": wx.BOTTOM,
+            "border": 4
+        }
+
+        box = wx.BoxSizer(wx.VERTICAL)
+        self.hid_rgb_check = wx.CheckBox(parent, label="Enable HID control")
+        self.hid_rgb_check.SetToolTip("Allow HID to directly control RGB values.")
+        box.Add(self.hid_rgb_check, **box_kw)\
+
+        return box
 
 def ui_main():
     app = wx.App()
