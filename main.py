@@ -111,7 +111,10 @@ RGB_MODE_OPTIONS = [
     "Single-color",
     "Tricolor",
     "Single-color Rainbow",
-    "Circular rainbow"
+    "Spiral rainbow",
+    "Rainbow wave",
+    "Single-color fade",
+    "Two-color fade",
 ]
 
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
