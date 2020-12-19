@@ -19,13 +19,13 @@ ArcinConfig = namedtuple(
     "rgb_darkness " +
     "rgb_red_2 rgb_green_2 rgb_blue_2 " +
     "rgb_red_3 rgb_green_3 rgb_blue_3 " +
-    "rgb_mode rgb_num_leds rgb_speed"
+    "rgb_mode rgb_num_leds rgb_speed rgb_idle_brightness"
     )
 
 Rgb = namedtuple("Rgb", "r g b")
 
 RgbConfig = namedtuple(
-    "RgbConfig", "flags rgb1 darkness rgb2 rgb3 mode num_leds speed")
+    "RgbConfig", "flags rgb1 darkness rgb2 rgb3 mode num_leds speed idle_brightness")
 
 ARCIN_CONFIG_VALID_KEYCODES = 13
 ARCIN_RGB_MAX_DARKNESS = 255
@@ -55,7 +55,8 @@ STRUCT_FMT_EX = (
     "B" +   # uint8 rgb_mode
     "B" +   # uint8 rgb_num_leds
     "b" +   # int8 rgb_speed
-    "6x")  # uint8 reserved[6]
+    "B" +   # uint8 rgb_idle_brightness
+    "5x")  # uint8 reserved[5]
 
 TT_OPTIONS = [
     "Analog only (Infinitas)",
@@ -117,6 +118,13 @@ RGB_MODE_OPTIONS = [
     "Two-color fade",
 ]
 
+RGB_TT_FADE_OUT_OPTIONS = [
+    "Instant",
+    "Quick",
+    "Slow",
+    "Really slow",
+]
+
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
 ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
 # removed in favor of complete remapping of E buttons
@@ -136,6 +144,12 @@ ARCIN_CONFIG_FLAG_WS2812B                = (1 << 13)
 ARCIN_RGB_FLAG_ENABLE_HID                = (1 << 0)
 ARCIN_RGB_FLAG_REACT_TO_TT               = (1 << 1)
 ARCIN_RGB_FLAG_FLIP_DIRECTION            = (1 << 2)
+# 00 = instant
+# 01 = 200ms
+# 10 = 400ms
+# 11 = 600ms
+ARCIN_RGB_FLAG_FADE_OUT_FAST             = (1 << 3)
+ARCIN_RGB_FLAG_FADE_OUT_SLOW             = (1 << 4)
 
 def get_devices():
     hid_filter = hid.HidDeviceFilter(vendor_id=VID, product_id=PID)
@@ -673,6 +687,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         rgb_mode = 0
         rgb_num_leds = ARCIN_RGB_NUM_LEDS_MAX
         rgb_speed = 0
+        rgb_idle_brightness = 0
         if self.rgb_config:
             rgb_flags = self.rgb_config.flags
             rgb_primary = self.rgb_config.rgb1
@@ -682,6 +697,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
             rgb_mode = self.rgb_config.mode
             rgb_num_leds = self.rgb_config.num_leds
             rgb_speed = self.rgb_config.speed
+            rgb_idle_brightness = self.rgb_config.rgb_idle_brightness
 
         conf = ArcinConfig(
             label=title,
@@ -705,7 +721,8 @@ These only take in effect while plugged in; they are reset when unplugged""")
             rgb_blue_3=rgb_tertiary.b,
             rgb_mode=rgb_mode,
             rgb_num_leds=rgb_num_leds,
-            rgb_speed=rgb_speed
+            rgb_speed=rgb_speed,
+            rgb_idle_brightness=rgb_idle_brightness,
         )
 
         return conf
@@ -786,7 +803,8 @@ These only take in effect while plugged in; they are reset when unplugged""")
             Rgb(conf.rgb_red_3, conf.rgb_green_3, conf.rgb_blue_3),
             conf.rgb_mode,
             conf.rgb_num_leds,
-            conf.rgb_speed
+            conf.rgb_speed,
+            conf.rgb_idle_brightness,
             )
 
     def __populate_device_list__(self):
@@ -1113,11 +1131,13 @@ class RgbWindowFrame(wx.Frame):
 
     led_mode_ctrl = None
     intensity_slider = None
+    idle_intensity_slider = None
     num_leds_slider = None
     speed_slider = None
+    fadeout_ctrl = None
 
     def __init__(self, *args, **kw):
-        default_size = (340, 400)
+        default_size = (340, 580)
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -1142,10 +1162,29 @@ class RgbWindowFrame(wx.Frame):
         self.grid.AddGrowableCol(1)
         row = 0
 
+        self.grid.Add(
+            self.__make_header_text__("LED configuration"),
+            pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
+        row += 1
+
         checklist_label = wx.StaticText(self.panel, label="Options")
         self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
         checklist_box = self.__create_checklist__(self.panel)
         self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        num_leds_label = wx.StaticText(self.panel, label="Number of LEDs")
+        self.num_leds_slider = wx.Slider(
+            self.panel, style=wx.SL_VALUE_LABEL, minValue=1, maxValue=ARCIN_RGB_NUM_LEDS_MAX)
+        self.num_leds_slider.SetTickFreq = 1
+        self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_MAX)
+        self.grid.Add(num_leds_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.num_leds_slider, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.grid.Add(
+            self.__make_header_text__("Color mode"),
+            pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
         row += 1
 
         led_mode_label = wx.StaticText(self.panel, label="Color mode")
@@ -1173,13 +1212,9 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(self.speed_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        num_leds_label = wx.StaticText(self.panel, label="Number of LEDs")
-        self.num_leds_slider = wx.Slider(
-            self.panel, style=wx.SL_VALUE_LABEL, minValue=1, maxValue=ARCIN_RGB_NUM_LEDS_MAX)
-        self.num_leds_slider.SetTickFreq = 1
-        self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_MAX)
-        self.grid.Add(num_leds_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.num_leds_slider, pos=(row, 1), flag=wx.EXPAND)
+        self.grid.Add(
+            self.__make_header_text__("Colors"),
+            pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
         row += 1
 
         rgb_label = wx.StaticText(self.panel, label="Default color")
@@ -1199,7 +1234,33 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(rgb_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.grid.Add(self.rgb3_button, pos=(row, 1), flag=wx.EXPAND)
         row += 1
-    
+
+        self.grid.Add(
+            self.__make_header_text__("Reactive turntable mode"),
+            pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
+        row += 1
+
+        self.qe1_react_check = wx.CheckBox(self.panel, label="Enable")
+        self.qe1_react_check.SetToolTip("Behavior depends on the color algorithm.")
+        self.grid.Add(self.qe1_react_check, pos=(row, 0), span=(1, 2))
+        row += 1
+
+        fadeout_label = wx.StaticText(self.panel, label="Fade out time")
+        self.fadeout_ctrl = wx.Choice(self.panel, choices=RGB_TT_FADE_OUT_OPTIONS)
+        self.fadeout_ctrl.Select(0)
+        self.grid.Add(fadeout_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.fadeout_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        idle_intensity_label = wx.StaticText(self.panel, label="Idle brightness")
+        self.idle_intensity_slider = wx.Slider(
+            self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=ARCIN_RGB_MAX_DARKNESS)
+        self.idle_intensity_slider.SetTickFreq = 1
+        self.idle_intensity_slider.SetValue(0)
+        self.grid.Add(idle_intensity_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.idle_intensity_slider, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         box.Add(self.grid, 1, flag=(wx.EXPAND | wx.ALL), border=8)
         self.panel.SetSizer(box)
 
@@ -1211,6 +1272,7 @@ class RgbWindowFrame(wx.Frame):
         self.qe1_react_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_REACT_TO_TT))
         self.flip_direction_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_FLIP_DIRECTION))
         self.intensity_slider.SetValue(ARCIN_RGB_MAX_DARKNESS - config.darkness)
+        self.idle_intensity_slider.SetValue(config.idle_brightness)
         self.rgb1_button.SetColour(wxcolour_from_rgb(config.rgb1))
         self.rgb2_button.SetColour(wxcolour_from_rgb(config.rgb2))
         self.rgb3_button.SetColour(wxcolour_from_rgb(config.rgb3))
@@ -1219,6 +1281,13 @@ class RgbWindowFrame(wx.Frame):
             self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_MAX)
         else:
             self.num_leds_slider.SetValue(config.num_leds)
+
+        fadeout_value = 0
+        if config.flags & ARCIN_RGB_FLAG_FADE_OUT_FAST:
+            fadeout_value |= 0x1
+        if config.flags & ARCIN_RGB_FLAG_FADE_OUT_SLOW:
+            fadeout_value |= 0x2
+        self.fadeout_ctrl.Select(fadeout_value)
 
         self.speed_slider.SetValue(config.speed)        
         pass
@@ -1231,6 +1300,12 @@ class RgbWindowFrame(wx.Frame):
             flags |= ARCIN_RGB_FLAG_REACT_TO_TT
         if self.flip_direction_check.IsChecked():
             flags |= ARCIN_RGB_FLAG_FLIP_DIRECTION
+
+        fadeout = self.fadeout_ctrl.GetSelection()
+        if fadeout & 0x2:
+            flags |= ARCIN_RGB_FLAG_FADE_OUT_SLOW
+        if fadeout & 0x1:
+            flags |= ARCIN_RGB_FLAG_FADE_OUT_FAST
 
         intensity = ARCIN_RGB_MAX_DARKNESS - self.intensity_slider.GetValue()
 
@@ -1247,7 +1322,13 @@ class RgbWindowFrame(wx.Frame):
             self.led_mode_ctrl.GetSelection(),
             self.num_leds_slider.GetValue(),
             self.speed_slider.GetValue(),
+            self.idle_intensity_slider.GetValue(),
             )
+
+    def __make_header_text__(self, text):
+        static_text = wx.StaticText(self.panel, label=text)
+        static_text.SetFont(static_text.GetFont().MakeBold())
+        return static_text
 
     def __create_checklist__(self, parent):
         box_kw = {
@@ -1258,15 +1339,11 @@ class RgbWindowFrame(wx.Frame):
 
         box = wx.BoxSizer(wx.VERTICAL)
 
-        self.hid_rgb_check = wx.CheckBox(parent, label="Enable HID control")
+        self.hid_rgb_check = wx.CheckBox(parent, label="Allow HID control")
         self.hid_rgb_check.SetToolTip("Allow HID to directly control RGB values when enabled.")
         box.Add(self.hid_rgb_check, **box_kw)
 
-        self.qe1_react_check = wx.CheckBox(parent, label="React to turntable")
-        self.qe1_react_check.SetToolTip("Behavior depends on the color algorithm.")
-        box.Add(self.qe1_react_check, **box_kw)
-
-        self.flip_direction_check = wx.CheckBox(parent, label="Flip direction")
+        self.flip_direction_check = wx.CheckBox(parent, label="Flip LED direction")
         self.flip_direction_check.SetToolTip("Flip direction of color algorithm.")
         box.Add(self.flip_direction_check, **box_kw)
 
