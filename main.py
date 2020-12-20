@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass
 import struct
 from collections import namedtuple
 from os import system
@@ -30,7 +31,9 @@ RgbConfig = namedtuple(
 
 ARCIN_CONFIG_VALID_KEYCODES = 13
 ARCIN_RGB_MAX_DARKNESS = 255
+
 ARCIN_RGB_NUM_LEDS_MAX = 60
+ARCIN_RGB_NUM_LEDS_DEFAULT = 10
 
 # Infinitas controller VID/PID = 0x1ccf / 0x8048
 VID = 0x1ccf
@@ -112,14 +115,28 @@ LED_OPTIONS = [
     "HID-controlled",
 ]
 
+@dataclass
+class RgbMode:
+    display_name: str = "???"
+    num_custom_color: int = 0
+    has_idle_animation: bool = True
+    tt_animation_speed: bool = True
+
 RGB_MODE_OPTIONS = [
-    "Single-color / breathe",
-    "Tricolor",
-    "Single-color rainbow",
-    "Spiral rainbow",
-    "Rainbow wave",
-    "Two-color fade",
-    "Random hue",
+    RgbMode("Single-color / breathe", 1),
+    RgbMode("Tricolor", 3),
+    RgbMode("Single-color rainbow", 0),
+    RgbMode("Spiral rainbow", 0),
+    RgbMode("Rainbow wave", 0),
+    RgbMode("Two-color fade", 2),
+    RgbMode(
+        "Random hue on trigger",
+        0,
+        has_idle_animation=False,
+        tt_animation_speed=False
+        ),
+    RgbMode("Single dot", 1),
+    RgbMode("Two dots", 2),
 ]
 
 RGB_TT_FADE_OUT_OPTIONS = [
@@ -425,7 +442,7 @@ class MainWindowFrame(wx.Frame):
         self.CreateStatusBar()
 
         self.__evaluate_save_load_buttons__()
-        self.__evaluate_debounce_options__()
+        self.__evaluate_controls__()
         self.__populate_device_list__()
 
     def makeMenuBar(self):
@@ -484,11 +501,12 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.debounce_check = wx.CheckBox(parent, label="Enable debouncing")
         self.debounce_check.SetToolTip(
             "Enables debounce logic for buttons to compensate for switch chatter.")
-        self.debounce_check.Bind(wx.EVT_CHECKBOX, self.on_debounce_check)
+        self.debounce_check.Bind(wx.EVT_CHECKBOX, self.__evaluate_controls__)
         box.Add(self.debounce_check, **box_kw)
 
         self.ws2812b_check = wx.CheckBox(parent, label="Enable WS2812B for B9")
         self.ws2812b_check.SetToolTip("Use button 9 pins as WS2812B output.")
+        self.ws2812b_check.Bind(wx.EVT_CHECKBOX, self.__evaluate_controls__)
         box.Add(self.ws2812b_check, **box_kw)
 
         return box
@@ -503,9 +521,6 @@ These only take in effect while plugged in; they are reset when unplugged""")
     def __do_forced_selection__(self, index):
         if self.devices_list.GetSelectedItemCount() == 0:
             self.devices_list.Select(index)
-
-    def on_debounce_check(self, e):
-        self.__evaluate_debounce_options__()
 
     def on_refresh(self, e):
         self.__populate_device_list__()
@@ -540,7 +555,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         self.__populate_from_conf__(conf)
         self.loading = False
         self.__evaluate_save_load_buttons__()
-        self.__evaluate_debounce_options__()
+        self.__evaluate_controls__()
         self.SetStatusText(
             f"Loaded from {device.product_name} ({device.serial_number}).")
 
@@ -691,7 +706,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         rgb_secondary = Rgb(0, 0, 0)
         rgb_tertiary = Rgb(0, 0, 0)
         rgb_mode = 0
-        rgb_num_leds = ARCIN_RGB_NUM_LEDS_MAX
+        rgb_num_leds = ARCIN_RGB_NUM_LEDS_DEFAULT
         rgb_idle_speed = 0
         rgb_idle_brightness = 0
         rgb_tt_speed = 0
@@ -831,8 +846,9 @@ These only take in effect while plugged in; they are reset when unplugged""")
 
         self.SetStatusText(f"Found {len(self.devices)} device(s).")
 
-    def __evaluate_debounce_options__(self):
+    def __evaluate_controls__(self, e=None):
         self.debounce_ctrl.Enable(self.debounce_check.IsChecked())
+        self.rgb_button.Enable(self.ws2812b_check.IsChecked())
 
     def __evaluate_save_load_buttons__(self):
         if self.devices_list.GetFirstSelected() >= 0 and not self.loading:
@@ -1188,7 +1204,7 @@ class RgbWindowFrame(wx.Frame):
         self.num_leds_slider = wx.Slider(
             self.panel, style=wx.SL_VALUE_LABEL, minValue=1, maxValue=ARCIN_RGB_NUM_LEDS_MAX)
         self.num_leds_slider.SetTickFreq = 1
-        self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_MAX)
+        self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_DEFAULT)
         self.grid.Add(num_leds_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.grid.Add(self.num_leds_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
@@ -1213,10 +1229,13 @@ class RgbWindowFrame(wx.Frame):
         row += 1
 
         led_mode_label = wx.StaticText(self.panel, label="Color mode")
-        self.led_mode_ctrl = wx.Choice(self.panel, choices=RGB_MODE_OPTIONS)
+        self.led_mode_ctrl = wx.Choice(
+            self.panel,
+            choices=[mode.display_name for mode in RGB_MODE_OPTIONS])
         self.led_mode_ctrl.Select(0)
+        self.led_mode_ctrl.Bind(wx.EVT_CHOICE, self.__evaluate_controls__)
         self.grid.Add(led_mode_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
+        self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)        
         row += 1
 
         idle_speed_label = wx.StaticText(self.panel, label="Animation speed")
@@ -1303,6 +1322,8 @@ class RgbWindowFrame(wx.Frame):
         if rgb_config is not None:
             self.populate_ui(rgb_config)
 
+        self.__evaluate_controls__()
+
     def populate_ui(self, config):
         self.hid_rgb_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_ENABLE_HID))
         self.qe1_react_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_REACT_TO_TT))
@@ -1386,7 +1407,7 @@ class RgbWindowFrame(wx.Frame):
         box.Add(self.hid_rgb_check, **box_kw)
 
         self.flip_direction_check = wx.CheckBox(parent, label="Flip LED direction")
-        self.flip_direction_check.SetToolTip("Flip direction of color algorithm.")
+        self.flip_direction_check.SetToolTip("Check this if the order of LEDs of your light strip is inversed.")
         box.Add(self.flip_direction_check, **box_kw)
 
         return box
@@ -1402,9 +1423,25 @@ class RgbWindowFrame(wx.Frame):
 
         self.qe1_react_check = wx.CheckBox(self.panel, label="Enable reactive turntable mode")
         self.qe1_react_check.SetToolTip("Behavior depends on the color algorithm.")
+        self.qe1_react_check.Bind(wx.EVT_CHECKBOX, self.__evaluate_controls__)
         box.Add(self.qe1_react_check, **box_kw)
 
         return box
+
+    def __evaluate_controls__(self, e=None):
+
+        rgb_mode = RGB_MODE_OPTIONS[self.led_mode_ctrl.GetSelection()]
+        self.rgb1_button.Enable(rgb_mode.num_custom_color >= 1)
+        self.rgb2_button.Enable(rgb_mode.num_custom_color >= 2)
+        self.rgb3_button.Enable(rgb_mode.num_custom_color >= 3)
+        self.idle_speed_slider.Enable(rgb_mode.has_idle_animation)
+
+        self.tt_speed_slider.Enable(
+            rgb_mode.tt_animation_speed and self.qe1_react_check.IsChecked())
+
+        self.fadeout_ctrl.Enable(self.qe1_react_check.IsChecked())
+        self.idle_intensity_slider.Enable(self.qe1_react_check.IsChecked())
+
 
 def ui_main():
     app = wx.App()
