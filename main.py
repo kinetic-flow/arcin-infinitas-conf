@@ -32,8 +32,8 @@ RgbConfig = namedtuple(
 ARCIN_CONFIG_VALID_KEYCODES = 13
 ARCIN_RGB_MAX_DARKNESS = 255
 
-ARCIN_RGB_NUM_LEDS_MAX = 60
-ARCIN_RGB_NUM_LEDS_DEFAULT = 10
+ARCIN_RGB_NUM_LEDS_MAX = 180
+ARCIN_RGB_NUM_LEDS_DEFAULT = 12
 
 # Infinitas controller VID/PID = 0x1ccf / 0x8048
 VID = 0x1ccf
@@ -135,12 +135,13 @@ RGB_MODE_OPTIONS = [
         has_idle_animation=False,
         tt_animation_speed=False
         ),
-    RgbMode("Single dot", 1),
+    RgbMode("One dot", 1),
     RgbMode("Two dots", 2),
+    RgbMode("Three dots", 3),
 ]
 
 RGB_TT_FADE_OUT_OPTIONS = [
-    "Instant",
+    "Very quick",
     "Quick",
     "Slow",
     "Really slow",
@@ -1164,7 +1165,7 @@ class RgbWindowFrame(wx.Frame):
     tt_speed_slider = None
 
     def __init__(self, *args, **kw):
-        default_size = (350, 670)
+        default_size = (380, 680) # same height as main window
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -1200,11 +1201,10 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        num_leds_label = wx.StaticText(self.panel, label="Number of LEDs")
-        self.num_leds_slider = wx.Slider(
-            self.panel, style=wx.SL_VALUE_LABEL, minValue=1, maxValue=ARCIN_RGB_NUM_LEDS_MAX)
-        self.num_leds_slider.SetTickFreq = 1
-        self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_DEFAULT)
+        num_leds_label = wx.StaticText(self.panel, label="Number of LEDs (max 180)")
+        self.num_leds_slider = wx.SpinCtrl(
+            self.panel, style=wx.SL_VALUE_LABEL,
+            min=1, max=ARCIN_RGB_NUM_LEDS_MAX, initial=ARCIN_RGB_NUM_LEDS_DEFAULT)
         self.grid.Add(num_leds_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.grid.Add(self.num_leds_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
@@ -1238,7 +1238,7 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)        
         row += 1
 
-        idle_speed_label = wx.StaticText(self.panel, label="Animation speed")
+        idle_speed_label = wx.StaticText(self.panel, label="Idle animation speed")
         self.idle_speed_slider = wx.Slider(
             self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=255)
         self.idle_speed_slider.SetTickFreq = 1
@@ -1407,7 +1407,7 @@ class RgbWindowFrame(wx.Frame):
         box.Add(self.hid_rgb_check, **box_kw)
 
         self.flip_direction_check = wx.CheckBox(parent, label="Flip LED direction")
-        self.flip_direction_check.SetToolTip("Check this if the order of LEDs of your light strip is inversed.")
+        self.flip_direction_check.SetToolTip("Check this if the order of LEDs of your light strip is reversed.")
         box.Add(self.flip_direction_check, **box_kw)
 
         return box
