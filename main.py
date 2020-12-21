@@ -121,19 +121,28 @@ class RgbMode:
     num_custom_color: int = 0
     has_idle_animation: bool = True
     tt_animation_speed: bool = True
+    idle_animation_with_tt_react: bool = True
 
 RGB_MODE_OPTIONS = [
-    RgbMode("Single-color / breathe", 1),
+    RgbMode(
+        "Single-color / breathe",
+        1,
+        idle_animation_with_tt_react=False,
+        ),
     RgbMode("Tricolor", 3),
     RgbMode("Single-color rainbow", 0),
     RgbMode("Spiral rainbow", 0),
     RgbMode("Rainbow wave", 0),
-    RgbMode("Two-color fade", 2),
+    RgbMode(
+        "Two-color fade",
+        2,
+        idle_animation_with_tt_react=False,
+        ),
     RgbMode(
         "Random hue on trigger",
         0,
         has_idle_animation=False,
-        tt_animation_speed=False
+        tt_animation_speed=False,
         ),
     RgbMode("One dot", 1),
     RgbMode("Two dots", 2),
@@ -1152,6 +1161,7 @@ class RgbWindowFrame(wx.Frame):
     qe1_react_check = None
     flip_direction_check = None
 
+    rgb_reset_button = None
     rgb1_button = None
     rgb2_button = None
     rgb3_button = None
@@ -1238,6 +1248,12 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)        
         row += 1
 
+        checklist_label = wx.StaticText(self.panel, label="Options")
+        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
+        checklist_box = self.__create_tt_checklist__(self.panel)
+        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
         idle_speed_label = wx.StaticText(self.panel, label="Idle animation speed")
         self.idle_speed_slider = wx.Slider(
             self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=255)
@@ -1254,7 +1270,10 @@ class RgbWindowFrame(wx.Frame):
 
         self.grid.Add(
             self.__make_header_text__("Colors"),
-            pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
+            pos=(row, 0), span=(1, 1), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.rgb_reset_button = wx.Button(self.panel, label="Reset")
+        self.rgb_reset_button.Bind(wx.EVT_BUTTON, self.on_rgb_reset_button)
+        self.grid.Add(self.rgb_reset_button, pos=(row, 1), flag=wx.ALIGN_RIGHT)
         row += 1
 
         rgb_label = wx.StaticText(self.panel, label="Default color")
@@ -1285,13 +1304,7 @@ class RgbWindowFrame(wx.Frame):
             pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
         row += 1
 
-        checklist_label = wx.StaticText(self.panel, label="Options")
-        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
-        checklist_box = self.__create_tt_checklist__(self.panel)
-        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
-        row += 1
-
-        tt_speed_label = wx.StaticText(self.panel, label="TT animation speed")
+        tt_speed_label = wx.StaticText(self.panel, label="Speed && direction")
         self.tt_speed_slider = wx.Slider(
             self.panel, style=wx.SL_VALUE_LABEL, minValue=-128, maxValue=127)
         self.tt_speed_slider.SetTickFreq = 1
@@ -1307,7 +1320,7 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(self.fadeout_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        idle_intensity_label = wx.StaticText(self.panel, label="Brightness when faded")
+        idle_intensity_label = wx.StaticText(self.panel, label="Minimum brightness")
         self.idle_intensity_slider = wx.Slider(
             self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=ARCIN_RGB_MAX_DARKNESS)
         self.idle_intensity_slider.SetTickFreq = 1
@@ -1384,6 +1397,11 @@ class RgbWindowFrame(wx.Frame):
             self.tt_speed_slider.GetValue(),
             )
 
+    def on_rgb_reset_button(self, e=None):
+        self.rgb1_button.SetColour(wx.Colour(255, 0, 0))
+        self.rgb2_button.SetColour(wx.Colour(0, 255, 0))
+        self.rgb3_button.SetColour(wx.Colour(0, 0, 255))
+
     def __make_line__(self):
         line = wx.StaticLine(self.panel, size=wx.Size(1, 1), style=wx.LI_HORIZONTAL)
         return line
@@ -1434,7 +1452,9 @@ class RgbWindowFrame(wx.Frame):
         self.rgb1_button.Enable(rgb_mode.num_custom_color >= 1)
         self.rgb2_button.Enable(rgb_mode.num_custom_color >= 2)
         self.rgb3_button.Enable(rgb_mode.num_custom_color >= 3)
-        self.idle_speed_slider.Enable(rgb_mode.has_idle_animation)
+        self.idle_speed_slider.Enable(
+            rgb_mode.has_idle_animation and
+            (rgb_mode.idle_animation_with_tt_react or not self.qe1_react_check.IsChecked()))
 
         self.tt_speed_slider.Enable(
             rgb_mode.tt_animation_speed and self.qe1_react_check.IsChecked())
