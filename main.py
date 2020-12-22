@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import struct
 from collections import namedtuple
-from os import system
+import subprocess
 import pywinusb.hid as hid
 import wx
 # import wx.lib.mixins.inspection
@@ -472,11 +472,11 @@ class MainWindowFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnAbout, about_item)
         self.Bind(wx.EVT_MENU, self.OnWinJoy, winjoy_item)
 
-    def OnAbout(self, event):
-        system("start https://github.com/minsang-github/arcin-infinitas")
+    def OnAbout(self, e=None):
+        subprocess.call("start https://github.com/minsang-github/arcin-infinitas", shell=True)
 
-    def OnWinJoy(self, event):
-        system("start joy.cpl")
+    def OnWinJoy(self, e=None):
+        subprocess.call("start joy.cpl", shell=True)
 
     def __create_checklist__(self, parent):
         box_kw = {
