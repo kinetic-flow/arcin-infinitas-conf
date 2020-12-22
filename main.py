@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import struct
 from collections import namedtuple
-import subprocess
+import webbrowser
 import pywinusb.hid as hid
 import wx
 # import wx.lib.mixins.inspection
@@ -458,11 +458,6 @@ class MainWindowFrame(wx.Frame):
     def makeMenuBar(self):
         options_menu = wx.Menu()
 
-        winjoy_item = options_menu.Append(
-            wx.ID_ANY, item="Game Controllers control panel")
-
-        options_menu.AppendSeparator()
-        
         about_item = options_menu.Append(wx.ID_ANY, item="Help (opens in browser)")
 
         menu_bar = wx.MenuBar()
@@ -470,13 +465,9 @@ class MainWindowFrame(wx.Frame):
 
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, self.OnAbout, about_item)
-        self.Bind(wx.EVT_MENU, self.OnWinJoy, winjoy_item)
 
     def OnAbout(self, e=None):
-        subprocess.call("start https://github.com/minsang-github/arcin-infinitas", shell=True)
-
-    def OnWinJoy(self, e=None):
-        subprocess.call("start joy.cpl", shell=True)
+        webbrowser.open("https://github.com/minsang-github/arcin-infinitas")
 
     def __create_checklist__(self, parent):
         box_kw = {
