@@ -120,10 +120,6 @@ LED_OPTIONS = [
 RGB_TT_PALETTES = [
     "Rainbow",
     "Party Hard", # need better name?
-    "Fire Fire", # remove - contains "off" values
-    "IIDXRED", # also contains off values and results in bad dither?
-    "Happy Sky", # nit, but too cyan for happy sky?
-    "TROOPERS", # too bright for troopers?
 ]
 
 @dataclass
@@ -131,36 +127,57 @@ class RgbMode:
     display_name: str = "???"
     num_custom_color: int = 0
     has_idle_animation: bool = True
+    idle_animation_unit: str = ""
     tt_animation_speed: bool = True
     idle_animation_with_tt_react: bool = True
     use_palettes: bool = False
+    multiplicity_label: str = "???"
+    multiplicity_tooltip: str = ""
+    multiplicity_min: int = -1
+    multiplicity_max: int = -1
 
 RGB_MODE_OPTIONS = [
     RgbMode(
         "Single-color / breathe",
         1,
         idle_animation_with_tt_react=False,
-        ),
-    RgbMode("Tricoro", 3),
-    RgbMode(
-        "Single-color rainbow",
-        0,
-        use_palettes=True,
-        ),
-    RgbMode(
-        "Spiral rainbow",
-        0,
-        use_palettes=True,
-        ),
-    RgbMode(
-        "Rainbow wave",
-        0,
-        use_palettes=True,
+        idle_animation_unit="BPM",
         ),
     RgbMode(
         "Two-color fade",
         2,
         idle_animation_with_tt_react=False,
+        idle_animation_unit="BPM",
+        ),
+    RgbMode(
+        "Tricolor",
+        3,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Dots",
+        3,
+        multiplicity_label="Number of dots",
+        multiplicity_tooltip="Specifies number of dots shown",
+        multiplicity_min=1,
+        multiplicity_max=3,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Single-color rainbow",
+        0,
+        use_palettes=True,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Rainbow wave",
+        0,
+        use_palettes=True,
+        multiplicity_label="Wave length",
+        multiplicity_tooltip="1 makes a full circle, 2+ makes the wave effect longer",
+        multiplicity_min=1,
+        multiplicity_max=6,
+        idle_animation_unit="RPM",
         ),
     RgbMode(
         "Random color on trigger",
@@ -168,10 +185,6 @@ RGB_MODE_OPTIONS = [
         has_idle_animation=False,
         tt_animation_speed=False,
         use_palettes=True,
-        ),
-    RgbMode(
-        "Dots",
-        3
         ),
 ]
 
@@ -314,36 +327,13 @@ class MainWindowFrame(wx.Frame):
 
     # list control for selecting HID device
     devices_list = None
-    load_button = None
-    save_button = None
 
-    title_ctrl = None
-
-    multitap_check = None
-    qe1_invert_check = None
-    debounce_check = None
-    mode_switch_check = None
-    led_off_check = None
-    ws2812b_check = None
-
-    qe1_tt_ctrl = None
-    debounce_ctrl = None
-
-    qe1_sens_ctrl = None
-
-    input_mode_ctrl = None
-
-    led_mode_ctrl = None
-
-    remapper_button = None
     remapper_frame = None
     remap = DEFAULT_EFFECTOR_MAPPING.copy()
 
-    keybinds_button = None
     keybinds_frame = None
     keycodes = None
 
-    rgb_button = None
     rgb_frame = None
     rgb_config = None
 
@@ -1179,28 +1169,10 @@ class RgbWindowFrame(wx.Frame):
 
     panel = None
     grid = None
-
-    hid_rgb_check = None
-    qe1_react_check = None
-    flip_direction_check = None
-
-    rgb_reset_button = None
-    rgb1_button = None
-    rgb2_button = None
-    rgb3_button = None
-
-    led_mode_ctrl = None
-    palette_ctrl = None
-
-    intensity_slider = None
-    idle_intensity_slider = None
-    num_leds_slider = None
-    idle_speed_slider = None
-    fadeout_ctrl = None
-    tt_speed_slider = None
+    idle_animation_unit = ""
 
     def __init__(self, *args, **kw):
-        default_size = (380, 640)
+        default_size = (380, 680) # same as main window
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -1270,21 +1242,25 @@ class RgbWindowFrame(wx.Frame):
         self.led_mode_ctrl.Select(0)
         self.led_mode_ctrl.Bind(wx.EVT_CHOICE, self.__evaluate_controls__)
         self.grid.Add(led_mode_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)        
+        self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        checklist_label = wx.StaticText(self.panel, label="Options")
-        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
-        checklist_box = self.__create_tt_checklist__(self.panel)
-        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        self.multiplicity_label = wx.StaticText(self.panel, label="")
+        self.multiplicity_slider = wx.SpinCtrl(
+            self.panel, style=wx.SL_VALUE_LABEL,
+            min=0, max=1, initial=0)
+        self.multiplicity_slider.Disable()
+        self.grid.Add(self.multiplicity_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.multiplicity_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        idle_speed_label = wx.StaticText(self.panel, label="Idle animation speed")
-        self.idle_speed_slider = wx.Slider(
-            self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=255)
+        self.idle_speed_label = wx.StaticText(self.panel, label="")
+        self.grid.Add(self.idle_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)        
+
+        self.idle_speed_slider = wx.Slider(self.panel, minValue=0, maxValue=240)
         self.idle_speed_slider.SetTickFreq = 1
         self.idle_speed_slider.SetValue(0)
-        self.grid.Add(idle_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.idle_speed_slider.Bind(wx.EVT_SLIDER, self.__evaluate_idle_speed__)
         self.grid.Add(self.idle_speed_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
         
@@ -1301,17 +1277,17 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(self.rgb_reset_button, pos=(row, 1), flag=wx.ALIGN_RIGHT)
         row += 1
 
-        palette_label = wx.StaticText(self.panel, label="Color palette")
+        self.palette_label = wx.StaticText(self.panel, label="Color palette")
         self.palette_ctrl = wx.Choice(self.panel, choices=RGB_TT_PALETTES)
         self.palette_ctrl.Bind(wx.EVT_CHOICE, self.__evaluate_controls__)
-        self.grid.Add(palette_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.palette_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.grid.Add(self.palette_ctrl, pos=(row, 1), flag=wx.EXPAND)        
         row += 1
 
         color_swatch_label = wx.StaticText(self.panel, label="Colors")
         self.grid.Add(color_swatch_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
-        color_swatch_box = self.__create_color_swatch__(self.panel)
-        self.grid.Add(color_swatch_box, pos=(row, 1), flag=wx.EXPAND)
+        self.color_swatch_box = self.__create_color_swatch__(self.panel)
+        self.grid.Add(self.color_swatch_box, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
         self.on_rgb_reset_button()
@@ -1326,12 +1302,18 @@ class RgbWindowFrame(wx.Frame):
             pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
         row += 1
 
-        tt_speed_label = wx.StaticText(self.panel, label="Speed && direction")
-        self.tt_speed_slider = wx.Slider(
-            self.panel, style=wx.SL_VALUE_LABEL, minValue=-128, maxValue=127)
+        checklist_label = wx.StaticText(self.panel, label="Options")
+        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
+        checklist_box = self.__create_tt_checklist__(self.panel)
+        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.tt_speed_label = wx.StaticText(self.panel, label="TT speed")
+        self.tt_speed_slider = wx.Slider(self.panel, minValue=-100, maxValue=100)
         self.tt_speed_slider.SetTickFreq = 1
         self.tt_speed_slider.SetValue(0)
-        self.grid.Add(tt_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.tt_speed_slider.Bind(wx.EVT_SLIDER, self.__evaluate_tt_speed__)
+        self.grid.Add(self.tt_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.grid.Add(self.tt_speed_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
@@ -1360,6 +1342,10 @@ class RgbWindowFrame(wx.Frame):
         self.__evaluate_controls__()
 
     def populate_ui(self, config):
+        # do this first so ranges are properly populated
+        self.led_mode_ctrl.Select(config.mode)
+        self.__evaluate_controls__()
+
         self.hid_rgb_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_ENABLE_HID))
         self.qe1_react_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_REACT_TO_TT))
         self.flip_direction_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_FLIP_DIRECTION))
@@ -1370,8 +1356,7 @@ class RgbWindowFrame(wx.Frame):
         self.rgb2_button.SetColour(wxcolour_from_rgb(config.rgb2))
         self.rgb3_button.SetColour(wxcolour_from_rgb(config.rgb3))
         self.palette_ctrl.Select(config.mode_options & 0x1F)
-
-        self.led_mode_ctrl.Select(config.mode)
+        self.multiplicity_slider.SetValue((config.mode_options >> 5) & 0x7)
 
         if config.num_leds == 0:
             self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_MAX)
@@ -1410,7 +1395,8 @@ class RgbWindowFrame(wx.Frame):
         rgb2 = self.rgb2_button.GetColour()
         rgb3 = self.rgb3_button.GetColour()
 
-        mode_options = self.palette_ctrl.GetSelection() & 0x1F
+        mode_options = ((self.palette_ctrl.GetSelection() & 0x1F) |
+            (self.multiplicity_slider.GetValue() << 5))
 
         return RgbConfig(
             flags,
@@ -1499,18 +1485,31 @@ class RgbWindowFrame(wx.Frame):
         return box
 
     def __evaluate_controls__(self, e=None):
-
         rgb_mode = RGB_MODE_OPTIONS[self.led_mode_ctrl.GetSelection()]
 
         self.rgb1_button.Enable(rgb_mode.num_custom_color >= 1)
         self.rgb2_button.Enable(rgb_mode.num_custom_color >= 2)
         self.rgb3_button.Enable(rgb_mode.num_custom_color >= 3)
 
-        self.palette_ctrl.Enable(rgb_mode.use_palettes)            
+        self.palette_ctrl.Enable(rgb_mode.use_palettes)
+        if rgb_mode.multiplicity_min != -1:
+            self.multiplicity_label.SetLabelText(rgb_mode.multiplicity_label)            
+            self.multiplicity_slider.SetToolTip(rgb_mode.multiplicity_tooltip)
+            self.multiplicity_slider.SetMin(rgb_mode.multiplicity_min)
+            self.multiplicity_slider.SetMax(rgb_mode.multiplicity_max)
+            self.multiplicity_slider.Enable()
+        else:
+            self.multiplicity_label.SetLabelText("")
+            self.multiplicity_slider.SetToolTip("")
+            self.multiplicity_slider.Disable()
 
-        self.idle_speed_slider.Enable(
+        idle_speed = bool(
             rgb_mode.has_idle_animation and
             (rgb_mode.idle_animation_with_tt_react or not self.qe1_react_check.IsChecked()))
+        self.idle_speed_slider.Enable(idle_speed)
+        self.idle_animation_unit = rgb_mode.idle_animation_unit
+        self.__evaluate_idle_speed__()
+        self.__evaluate_tt_speed__()
 
         self.tt_speed_slider.Enable(
             rgb_mode.tt_animation_speed and self.qe1_react_check.IsChecked())
@@ -1518,6 +1517,25 @@ class RgbWindowFrame(wx.Frame):
         self.fadeout_ctrl.Enable(self.qe1_react_check.IsChecked())
         self.idle_intensity_slider.Enable(self.qe1_react_check.IsChecked())
 
+    def __evaluate_idle_speed__(self, e=None):
+        if len(self.idle_animation_unit) == 0:
+            self.idle_speed_label.SetLabelText("")
+            return
+
+        raw = self.idle_speed_slider.GetValue()
+
+        if self.idle_animation_unit == "RPM":
+            converted = (raw / 2) # must match FW calculation
+        elif self.idle_animation_unit == "BPM":
+            converted = (raw * raw / 255) # must match FW calculation
+        else:
+            converted = raw
+
+        self.idle_speed_label.SetLabelText(f"Speed: {converted:.2f} {self.idle_animation_unit}")
+
+    def __evaluate_tt_speed__(self, e=None):
+        raw = self.tt_speed_slider.GetValue()
+        self.tt_speed_label.SetLabelText(f"TT Speed: {raw / 10 :.1f}x")
 
 def ui_main():
     app = wx.App()
