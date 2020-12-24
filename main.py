@@ -119,7 +119,9 @@ LED_OPTIONS = [
 
 RGB_TT_PALETTES = [
     "Rainbow",
-    "Party Hard", # need better name?
+    "Dream",
+    "Happy Sky",
+    "Lincle",
 ]
 
 @dataclass
