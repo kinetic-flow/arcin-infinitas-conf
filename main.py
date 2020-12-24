@@ -120,8 +120,6 @@ LED_OPTIONS = [
 RGB_TT_PALETTES = [
     "Rainbow",
     "Dream",
-    "Happy Sky",
-    "Lincle",
 ]
 
 @dataclass
@@ -187,6 +185,18 @@ RGB_MODE_OPTIONS = [
         tt_animation_speed=False,
         use_palettes=True,
         idle_animation_unit="BPM",
+        ),
+    RgbMode(
+        "Pride (animation only)",
+        0,
+        has_idle_animation=False,
+        tt_animation_speed=False,
+        ),
+    RgbMode(
+        "Pacifica (animation only)",
+        0,
+        has_idle_animation=False,
+        tt_animation_speed=False,
         ),
 ]
 
