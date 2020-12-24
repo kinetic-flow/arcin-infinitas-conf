@@ -144,7 +144,7 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="BPM",
         ),
     RgbMode(
-        "Two-color fade",
+        "Flash (two colors)",
         2,
         idle_animation_with_tt_react=False,
         idle_animation_unit="BPM",
@@ -155,7 +155,7 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="RPM",
         ),
     RgbMode(
-        "Dots",
+        "Spinning dots",
         3,
         multiplicity_label="Number of dots",
         multiplicity_tooltip="Specifies number of dots shown",
@@ -164,7 +164,7 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="RPM",
         ),
     RgbMode(
-        "Single-color rainbow",
+        "Rainbow glow",
         0,
         use_palettes=True,
         idle_animation_unit="RPM",
@@ -180,11 +180,11 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="RPM",
         ),
     RgbMode(
-        "Random color on trigger",
+        "Flash (random color)",
         0,
-        has_idle_animation=False,
         tt_animation_speed=False,
         use_palettes=True,
+        idle_animation_unit="BPM",
         ),
 ]
 
