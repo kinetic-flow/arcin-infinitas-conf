@@ -120,6 +120,14 @@ LED_OPTIONS = [
 RGB_TT_PALETTES = [
     "Rainbow",
     "Dream",
+    "Happy Sky",
+    "DJ TROOPERS",
+    "Empress",
+    "Tricoro",
+    "CANNON BALLERS",
+    "Rootage",
+    "HeroicVerse",
+    "Bistrover",
 ]
 
 @dataclass
@@ -155,10 +163,28 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="RPM",
         ),
     RgbMode(
-        "Spinning dots",
+        "Color dots",
         3,
         multiplicity_label="Number of dots",
         multiplicity_tooltip="Specifies number of dots shown",
+        multiplicity_min=1,
+        multiplicity_max=3,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Color divisions",
+        3,
+        multiplicity_label="Number of colors",
+        multiplicity_tooltip="Specifies number of colors used",
+        multiplicity_min=2,
+        multiplicity_max=3,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Color waves",
+        3,
+        multiplicity_label="Number of colors",
+        multiplicity_tooltip="Specifies number of waves",
         multiplicity_min=1,
         multiplicity_max=3,
         idle_animation_unit="RPM",
@@ -170,7 +196,7 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="RPM",
         ),
     RgbMode(
-        "Rainbow wave",
+        "Rainbow spiral",
         0,
         use_palettes=True,
         multiplicity_label="Wave length",
