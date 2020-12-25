@@ -12,22 +12,24 @@ from usb_hid_keys import USB_HID_KEYCODES
 
 ArcinConfig = namedtuple(
     "ArcinConfig",
-    "label flags qe1_sens qe2_sens " +
-    "debounce_ticks keycodes " +
-    "remap_start_sel remap_b8_b9 "+
-    "rgb_flags " +
-    "rgb_red rgb_green rgb_blue " +
-    "rgb_darkness " +
-    "rgb_red_2 rgb_green_2 rgb_blue_2 " +
-    "rgb_red_3 rgb_green_3 rgb_blue_3 " +
-    "rgb_mode rgb_num_leds rgb_idle_speed rgb_idle_brightness rgb_tt_speed"
+    "label flags qe1_sens qe2_sens "
+    "debounce_ticks keycodes "
+    "remap_start_sel remap_b8_b9 "
+    "rgb_flags "
+    "rgb_red rgb_green rgb_blue "
+    "rgb_darkness "
+    "rgb_red_2 rgb_green_2 rgb_blue_2 "
+    "rgb_red_3 rgb_green_3 rgb_blue_3 "
+    "rgb_mode rgb_num_leds rgb_idle_speed "
+    "rgb_idle_brightness rgb_tt_speed rgb_mode_options"
     )
 
 Rgb = namedtuple("Rgb", "r g b")
 
 RgbConfig = namedtuple(
     "RgbConfig",
-    "flags rgb1 darkness rgb2 rgb3 mode num_leds idle_speed idle_brightness tt_speed")
+    "flags rgb1 darkness rgb2 rgb3 mode "
+    "num_leds idle_speed idle_brightness tt_speed mode_options")
 
 ARCIN_CONFIG_VALID_KEYCODES = 13
 ARCIN_RGB_MAX_DARKNESS = 255
@@ -41,29 +43,29 @@ PID = 0x8048
 CONFIG_SEGMENT_ID = hid.get_full_usage_id(0xff55, 0xc0ff)
 
 STRUCT_FMT_EX = (
-    "12s" + # uint8 label[12]
-    "L" +   # uint32 flags
-    "b" +   # int8 qe1_sens
-    "b" +   # int8 qe2_sens
-    "x" +   # uint8 reserved (was: effector_mode)
-    "B" +   # uint8 debounce_ticks
-    "16s" + # char keycodes[16]
-    "B" +   # uint8 remap_start_sel
-    "B" +   # uint8 remap_b8_b9
-    "2x"+   # uint8 reserved[2]
+    "12s"  # uint8 label[12]
+    "L"    # uint32 flags
+    "b"    # int8 qe1_sens
+    "b"    # int8 qe2_sens
+    "x"    # uint8 reserved (was: effector_mode)
+    "B"    # uint8 debounce_ticks
+    "16s"  # char keycodes[16]
+    "B"    # uint8 remap_start_sel
+    "B"    # uint8 remap_b8_b9
+    "2x"   # uint8 reserved[2]
 
-    "B" +   # uint8 rgb_flags
-    "BBB" + # uint8 red, green, blue (primary)
-    "B" +   # uint8 rgb_darkness
-    "BBB" + # uint8 red, green, blue (secondary)
-    "BBB" + # uint8 red, green, blue (tertiary)
-    "B" +   # uint8 rgb_mode
-    "B" +   # uint8 rgb_num_leds
-    "B" +   # uint8 rgb_idle_speed
-    "B" +   # uint8 rgb_idle_brightness
-    "b" +   # int8 rgb_tt_speed
-
-    "4x")  # uint8 reserved[4]
+    "B"    # uint8 rgb_flags
+    "BBB"  # uint8 red, green, blue (primary)
+    "B"    # uint8 rgb_darkness
+    "BBB"  # uint8 red, green, blue (secondary)
+    "BBB"  # uint8 red, green, blue (tertiary)
+    "B"    # uint8 rgb_mode
+    "B"    # uint8 rgb_num_leds
+    "B"    # uint8 rgb_idle_speed
+    "B"    # uint8 rgb_idle_brightness
+    "b"    # int8 rgb_tt_speed
+    "B"    # uint8 rgb_mode_options
+    "3x")  # uint8 reserved[3]
 
 TT_OPTIONS = [
     "Analog only (Infinitas)",
@@ -115,38 +117,87 @@ LED_OPTIONS = [
     "HID-controlled",
 ]
 
+RGB_TT_PALETTES = [
+    "Rainbow",
+    "Dream",
+]
+
 @dataclass
 class RgbMode:
     display_name: str = "???"
     num_custom_color: int = 0
     has_idle_animation: bool = True
+    idle_animation_unit: str = ""
     tt_animation_speed: bool = True
     idle_animation_with_tt_react: bool = True
+    use_palettes: bool = False
+    multiplicity_label: str = "???"
+    multiplicity_tooltip: str = ""
+    multiplicity_min: int = -1
+    multiplicity_max: int = -1
 
 RGB_MODE_OPTIONS = [
     RgbMode(
         "Single-color / breathe",
         1,
         idle_animation_with_tt_react=False,
+        idle_animation_unit="BPM",
         ),
-    RgbMode("Tricolor", 3),
-    RgbMode("Single-color rainbow", 0),
-    RgbMode("Spiral rainbow", 0),
-    RgbMode("Rainbow wave", 0),
     RgbMode(
-        "Two-color fade",
+        "Flash (two colors)",
         2,
         idle_animation_with_tt_react=False,
+        idle_animation_unit="BPM",
         ),
     RgbMode(
-        "Random hue on trigger",
+        "Tricolor",
+        3,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Spinning dots",
+        3,
+        multiplicity_label="Number of dots",
+        multiplicity_tooltip="Specifies number of dots shown",
+        multiplicity_min=1,
+        multiplicity_max=3,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Rainbow glow",
+        0,
+        use_palettes=True,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Rainbow wave",
+        0,
+        use_palettes=True,
+        multiplicity_label="Wave length",
+        multiplicity_tooltip="1 makes a full circle, 2+ makes the wave effect longer",
+        multiplicity_min=1,
+        multiplicity_max=6,
+        idle_animation_unit="RPM",
+        ),
+    RgbMode(
+        "Flash (random color)",
+        0,
+        tt_animation_speed=False,
+        use_palettes=True,
+        idle_animation_unit="BPM",
+        ),
+    RgbMode(
+        "Pride (animation only)",
         0,
         has_idle_animation=False,
         tt_animation_speed=False,
         ),
-    RgbMode("One dot", 1),
-    RgbMode("Two dots", 2),
-    RgbMode("Three dots", 3),
+    RgbMode(
+        "Pacifica (animation only)",
+        0,
+        has_idle_animation=False,
+        tt_animation_speed=False,
+        ),
 ]
 
 RGB_TT_FADE_OUT_OPTIONS = [
@@ -155,6 +206,7 @@ RGB_TT_FADE_OUT_OPTIONS = [
     "Slow",
     "Really slow",
 ]
+
 
 ARCIN_CONFIG_FLAG_SEL_MULTI_TAP          = (1 << 0)
 ARCIN_CONFIG_FLAG_INVERT_QE1             = (1 << 1)
@@ -245,6 +297,7 @@ def save_to_device(device, conf):
             conf.rgb_idle_speed,
             conf.rgb_idle_brightness,
             conf.rgb_tt_speed,
+            conf.rgb_mode_options,
             )
     except:
         return (False, "Format error")
@@ -286,36 +339,13 @@ class MainWindowFrame(wx.Frame):
 
     # list control for selecting HID device
     devices_list = None
-    load_button = None
-    save_button = None
 
-    title_ctrl = None
-
-    multitap_check = None
-    qe1_invert_check = None
-    debounce_check = None
-    mode_switch_check = None
-    led_off_check = None
-    ws2812b_check = None
-
-    qe1_tt_ctrl = None
-    debounce_ctrl = None
-
-    qe1_sens_ctrl = None
-
-    input_mode_ctrl = None
-
-    led_mode_ctrl = None
-
-    remapper_button = None
     remapper_frame = None
     remap = DEFAULT_EFFECTOR_MAPPING.copy()
 
-    keybinds_button = None
     keybinds_frame = None
     keycodes = None
 
-    rgb_button = None
     rgb_frame = None
     rgb_config = None
 
@@ -711,6 +741,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
         rgb_idle_speed = 0
         rgb_idle_brightness = 0
         rgb_tt_speed = 0
+        rgb_mode_options = 0
         if self.rgb_config:
             rgb_flags = self.rgb_config.flags
             rgb_primary = self.rgb_config.rgb1
@@ -722,6 +753,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
             rgb_idle_speed = self.rgb_config.idle_speed
             rgb_idle_brightness = self.rgb_config.idle_brightness
             rgb_tt_speed = self.rgb_config.tt_speed
+            rgb_mode_options = self.rgb_config.mode_options
 
         conf = ArcinConfig(
             label=title,
@@ -748,6 +780,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
             rgb_idle_speed=rgb_idle_speed,
             rgb_idle_brightness=rgb_idle_brightness,
             rgb_tt_speed=rgb_tt_speed,
+            rgb_mode_options=rgb_mode_options,
         )
 
         return conf
@@ -831,6 +864,7 @@ These only take in effect while plugged in; they are reset when unplugged""")
             conf.rgb_idle_speed,
             conf.rgb_idle_brightness,
             conf.rgb_tt_speed,
+            conf.rgb_mode_options,
             )
 
     def __populate_device_list__(self):
@@ -1147,26 +1181,10 @@ class RgbWindowFrame(wx.Frame):
 
     panel = None
     grid = None
-
-    hid_rgb_check = None
-    qe1_react_check = None
-    flip_direction_check = None
-
-    rgb_reset_button = None
-    rgb1_button = None
-    rgb2_button = None
-    rgb3_button = None
-
-    led_mode_ctrl = None
-    intensity_slider = None
-    idle_intensity_slider = None
-    num_leds_slider = None
-    idle_speed_slider = None
-    fadeout_ctrl = None
-    tt_speed_slider = None
+    idle_animation_unit = ""
 
     def __init__(self, *args, **kw):
-        default_size = (380, 680) # same height as main window
+        default_size = (380, 680) # same as main window
         kw['size'] = default_size
         kw['style'] = (
             wx.RESIZE_BORDER |
@@ -1236,21 +1254,25 @@ class RgbWindowFrame(wx.Frame):
         self.led_mode_ctrl.Select(0)
         self.led_mode_ctrl.Bind(wx.EVT_CHOICE, self.__evaluate_controls__)
         self.grid.Add(led_mode_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)        
+        self.grid.Add(self.led_mode_ctrl, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        checklist_label = wx.StaticText(self.panel, label="Options")
-        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
-        checklist_box = self.__create_tt_checklist__(self.panel)
-        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        self.multiplicity_label = wx.StaticText(self.panel, label="")
+        self.multiplicity_slider = wx.SpinCtrl(
+            self.panel, style=wx.SL_VALUE_LABEL,
+            min=0, max=1, initial=0)
+        self.multiplicity_slider.Disable()
+        self.grid.Add(self.multiplicity_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.multiplicity_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        idle_speed_label = wx.StaticText(self.panel, label="Idle animation speed")
-        self.idle_speed_slider = wx.Slider(
-            self.panel, style=wx.SL_VALUE_LABEL, minValue=0, maxValue=255)
+        self.idle_speed_label = wx.StaticText(self.panel, label="")
+        self.grid.Add(self.idle_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)        
+
+        self.idle_speed_slider = wx.Slider(self.panel, minValue=0, maxValue=240)
         self.idle_speed_slider.SetTickFreq = 1
         self.idle_speed_slider.SetValue(0)
-        self.grid.Add(idle_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.idle_speed_slider.Bind(wx.EVT_SLIDER, self.__evaluate_idle_speed__)
         self.grid.Add(self.idle_speed_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
         
@@ -1267,23 +1289,20 @@ class RgbWindowFrame(wx.Frame):
         self.grid.Add(self.rgb_reset_button, pos=(row, 1), flag=wx.ALIGN_RIGHT)
         row += 1
 
-        rgb_label = wx.StaticText(self.panel, label="Default color")
-        self.rgb1_button = wx.ColourPickerCtrl(self.panel)
-        self.grid.Add(rgb_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.rgb1_button, pos=(row, 1), flag=wx.EXPAND)
+        self.palette_label = wx.StaticText(self.panel, label="Color palette")
+        self.palette_ctrl = wx.Choice(self.panel, choices=RGB_TT_PALETTES)
+        self.palette_ctrl.Bind(wx.EVT_CHOICE, self.__evaluate_controls__)
+        self.grid.Add(self.palette_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.grid.Add(self.palette_ctrl, pos=(row, 1), flag=wx.EXPAND)        
         row += 1
 
-        rgb_label = wx.StaticText(self.panel, label="Secondary color")
-        self.rgb2_button = wx.ColourPickerCtrl(self.panel)
-        self.grid.Add(rgb_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.rgb2_button, pos=(row, 1), flag=wx.EXPAND)
+        color_swatch_label = wx.StaticText(self.panel, label="Colors")
+        self.grid.Add(color_swatch_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
+        self.color_swatch_box = self.__create_color_swatch__(self.panel)
+        self.grid.Add(self.color_swatch_box, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
-        rgb_label = wx.StaticText(self.panel, label="Tertiary color")
-        self.rgb3_button = wx.ColourPickerCtrl(self.panel)
-        self.grid.Add(rgb_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.grid.Add(self.rgb3_button, pos=(row, 1), flag=wx.EXPAND)
-        row += 1
+        self.on_rgb_reset_button()
 
         self.grid.Add(
             self.__make_line__(),
@@ -1295,12 +1314,18 @@ class RgbWindowFrame(wx.Frame):
             pos=(row, 0), span=(1, 2), flag=wx.ALIGN_CENTER_VERTICAL)
         row += 1
 
-        tt_speed_label = wx.StaticText(self.panel, label="Speed && direction")
-        self.tt_speed_slider = wx.Slider(
-            self.panel, style=wx.SL_VALUE_LABEL, minValue=-128, maxValue=127)
+        checklist_label = wx.StaticText(self.panel, label="Options")
+        self.grid.Add(checklist_label, pos=(row, 0), flag=wx.ALIGN_TOP, border=2)
+        checklist_box = self.__create_tt_checklist__(self.panel)
+        self.grid.Add(checklist_box, pos=(row, 1), flag=wx.EXPAND)
+        row += 1
+
+        self.tt_speed_label = wx.StaticText(self.panel, label="TT speed")
+        self.tt_speed_slider = wx.Slider(self.panel, minValue=-100, maxValue=100)
         self.tt_speed_slider.SetTickFreq = 1
         self.tt_speed_slider.SetValue(0)
-        self.grid.Add(tt_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.tt_speed_slider.Bind(wx.EVT_SLIDER, self.__evaluate_tt_speed__)
+        self.grid.Add(self.tt_speed_label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.grid.Add(self.tt_speed_slider, pos=(row, 1), flag=wx.EXPAND)
         row += 1
 
@@ -1329,15 +1354,22 @@ class RgbWindowFrame(wx.Frame):
         self.__evaluate_controls__()
 
     def populate_ui(self, config):
+        # do this first so ranges are properly populated
+        self.led_mode_ctrl.Select(config.mode)
+        self.__evaluate_controls__()
+
         self.hid_rgb_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_ENABLE_HID))
         self.qe1_react_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_REACT_TO_TT))
         self.flip_direction_check.SetValue(bool(config.flags & ARCIN_RGB_FLAG_FLIP_DIRECTION))
         self.intensity_slider.SetValue(ARCIN_RGB_MAX_DARKNESS - config.darkness)
         self.idle_intensity_slider.SetValue(config.idle_brightness)
+
         self.rgb1_button.SetColour(wxcolour_from_rgb(config.rgb1))
         self.rgb2_button.SetColour(wxcolour_from_rgb(config.rgb2))
         self.rgb3_button.SetColour(wxcolour_from_rgb(config.rgb3))
-        self.led_mode_ctrl.Select(config.mode)
+        self.palette_ctrl.Select(config.mode_options & 0x1F)
+        self.multiplicity_slider.SetValue((config.mode_options >> 5) & 0x7)
+
         if config.num_leds == 0:
             self.num_leds_slider.SetValue(ARCIN_RGB_NUM_LEDS_MAX)
         else:
@@ -1375,6 +1407,9 @@ class RgbWindowFrame(wx.Frame):
         rgb2 = self.rgb2_button.GetColour()
         rgb3 = self.rgb3_button.GetColour()
 
+        mode_options = ((self.palette_ctrl.GetSelection() & 0x1F) |
+            (self.multiplicity_slider.GetValue() << 5))
+
         return RgbConfig(
             flags,
             rgb_from_Wxcolour(rgb1),
@@ -1386,12 +1421,14 @@ class RgbWindowFrame(wx.Frame):
             self.idle_speed_slider.GetValue(),
             self.idle_intensity_slider.GetValue(),
             self.tt_speed_slider.GetValue(),
+            mode_options,
             )
 
     def on_rgb_reset_button(self, e=None):
         self.rgb1_button.SetColour(wx.Colour(255, 0, 0))
         self.rgb2_button.SetColour(wx.Colour(0, 255, 0))
         self.rgb3_button.SetColour(wx.Colour(0, 0, 255))
+        self.palette_ctrl.Select(0)
 
     def __make_line__(self):
         line = wx.StaticLine(self.panel, size=wx.Size(1, 1), style=wx.LI_HORIZONTAL)
@@ -1420,6 +1457,28 @@ class RgbWindowFrame(wx.Frame):
         box.Add(self.flip_direction_check, **box_kw)
 
         return box
+        
+    def __create_color_swatch__(self, parent):
+        box_kw = {
+            "proportion": 1,
+            "border": 0,
+        }
+
+        # it doesn't really matter what th width is, as long as it's positive
+        size = (20, -1)
+
+        box = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.rgb1_button = wx.ColourPickerCtrl(self.panel, size=size)
+        box.Add(self.rgb1_button, **box_kw)
+
+        self.rgb2_button = wx.ColourPickerCtrl(self.panel, size=size)
+        box.Add(self.rgb2_button, **box_kw)
+
+        self.rgb3_button = wx.ColourPickerCtrl(self.panel, size=size)
+        box.Add(self.rgb3_button, **box_kw)
+
+        return box
 
     def __create_tt_checklist__(self, parent):
         box_kw = {
@@ -1438,14 +1497,31 @@ class RgbWindowFrame(wx.Frame):
         return box
 
     def __evaluate_controls__(self, e=None):
-
         rgb_mode = RGB_MODE_OPTIONS[self.led_mode_ctrl.GetSelection()]
+
         self.rgb1_button.Enable(rgb_mode.num_custom_color >= 1)
         self.rgb2_button.Enable(rgb_mode.num_custom_color >= 2)
         self.rgb3_button.Enable(rgb_mode.num_custom_color >= 3)
-        self.idle_speed_slider.Enable(
+
+        self.palette_ctrl.Enable(rgb_mode.use_palettes)
+        if rgb_mode.multiplicity_min != -1:
+            self.multiplicity_label.SetLabelText(rgb_mode.multiplicity_label)            
+            self.multiplicity_slider.SetToolTip(rgb_mode.multiplicity_tooltip)
+            self.multiplicity_slider.SetMin(rgb_mode.multiplicity_min)
+            self.multiplicity_slider.SetMax(rgb_mode.multiplicity_max)
+            self.multiplicity_slider.Enable()
+        else:
+            self.multiplicity_label.SetLabelText("")
+            self.multiplicity_slider.SetToolTip("")
+            self.multiplicity_slider.Disable()
+
+        idle_speed = bool(
             rgb_mode.has_idle_animation and
             (rgb_mode.idle_animation_with_tt_react or not self.qe1_react_check.IsChecked()))
+        self.idle_speed_slider.Enable(idle_speed)
+        self.idle_animation_unit = rgb_mode.idle_animation_unit
+        self.__evaluate_idle_speed__()
+        self.__evaluate_tt_speed__()
 
         self.tt_speed_slider.Enable(
             rgb_mode.tt_animation_speed and self.qe1_react_check.IsChecked())
@@ -1453,6 +1529,25 @@ class RgbWindowFrame(wx.Frame):
         self.fadeout_ctrl.Enable(self.qe1_react_check.IsChecked())
         self.idle_intensity_slider.Enable(self.qe1_react_check.IsChecked())
 
+    def __evaluate_idle_speed__(self, e=None):
+        if len(self.idle_animation_unit) == 0:
+            self.idle_speed_label.SetLabelText("")
+            return
+
+        raw = self.idle_speed_slider.GetValue()
+
+        if self.idle_animation_unit == "RPM":
+            converted = (raw / 2) # must match FW calculation
+        elif self.idle_animation_unit == "BPM":
+            converted = (raw * raw / 255) # must match FW calculation
+        else:
+            converted = raw
+
+        self.idle_speed_label.SetLabelText(f"Speed: {converted:.2f} {self.idle_animation_unit}")
+
+    def __evaluate_tt_speed__(self, e=None):
+        raw = self.tt_speed_slider.GetValue()
+        self.tt_speed_label.SetLabelText(f"TT Speed: {raw / 10 :.1f}x")
 
 def ui_main():
     app = wx.App()
