@@ -4,14 +4,14 @@ import tinycss2
 from collections import namedtuple
 
 # extract palettes: https://colorpalettefromimage.com/
+# extract gradient: https://slaton.info/projects/fastled-gradient-tool/index.html
 # generating gradient: https://cssgradient.io/
 
-happysky = """
-    rgba(255,255,255,1) 0%, rgba(230,239,245,1) 10%, rgba(74,190,255,1) 23%, rgba(32,105,173,1) 40%, rgba(74,190,255,1) 70%, rgba(255,255,255,1) 90%, rgba(255,255,255,1) 100%
+hv = """
+    rgba(128,0,128,1) 0%, rgba(79,43,154,1) 17%, rgba(218,7,218,1) 73%, rgba(128,0,128,1) 100%
     """
-
-lincle = """
-    rgba(52,177,224,1) 0%, rgba(96,199,234,1) 3%, rgba(185,229,239,1) 8%, rgba(211,238,240,1) 15%, rgba(210,53,0,1) 28%, rgba(210,53,0,1) 43%, rgba(210,53,0,1) 61%, rgba(211,238,240,1) 70%, rgba(207,237,240,1) 77%, rgba(196,232,239,1) 83%, rgba(141,211,233,1) 93%, rgba(52,177,224,1) 100%
+emp = """
+    rgba(255,0,255,1) 0%, rgba(202,2,43,1) 49%, rgba(89,31,40,1) 100%
     """
 
 Color = namedtuple('Color', 'r g b a o')
@@ -32,7 +32,7 @@ def strip_chars(color):
     return c
 
 def convert_to_c_array(color):
-    return f'{color.o}, 0x{color.r:x}, 0x{color.g:x}, 0x{color.b:x},\n'
+    return f'{color.o}, 0x{color.r:02x}, 0x{color.g:02x}, 0x{color.b:02x},\n'
 
 def convert_css_into_c_array(css):
     elements = split_into_elements(css)
@@ -44,7 +44,8 @@ def convert_css_into_c_array(css):
     if ((colors[0].r != colors[-1].r) or
        (colors[0].g != colors[-1].g) or
        (colors[0].b != colors[-1].b)):
-        assert False, "Must start and end the same"
+        #assert False, "Must start and end the same"
+        pass
     
     result_str = '{\n'
     for c in colors:
@@ -55,7 +56,7 @@ def convert_css_into_c_array(css):
     result_str += '\n};\n'
     return result_str
 
-print(convert_css_into_c_array(happysky))
-print(convert_css_into_c_array(lincle))
+print(convert_css_into_c_array(hv))
+print(convert_css_into_c_array(emp))
 
 pass
