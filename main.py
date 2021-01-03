@@ -158,6 +158,13 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="BPM",
         ),
     RgbMode(
+        "Flash (random color)",
+        0,
+        tt_animation_speed=False,
+        use_palettes=True,
+        idle_animation_unit="BPM",
+        ),
+    RgbMode(
         "Tricolor",
         3,
         idle_animation_unit="RPM",
@@ -181,15 +188,6 @@ RGB_MODE_OPTIONS = [
         idle_animation_unit="RPM",
         ),
     RgbMode(
-        "Color waves",
-        3,
-        multiplicity_label="Number of colors",
-        multiplicity_tooltip="Specifies number of waves",
-        multiplicity_min=1,
-        multiplicity_max=3,
-        idle_animation_unit="RPM",
-        ),
-    RgbMode(
         "Rainbow glow",
         0,
         use_palettes=True,
@@ -204,13 +202,6 @@ RGB_MODE_OPTIONS = [
         multiplicity_min=1,
         multiplicity_max=6,
         idle_animation_unit="RPM",
-        ),
-    RgbMode(
-        "Flash (random color)",
-        0,
-        tt_animation_speed=False,
-        use_palettes=True,
-        idle_animation_unit="BPM",
         ),
     RgbMode(
         "Pride (animation only)",
